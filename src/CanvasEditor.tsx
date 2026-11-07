@@ -356,10 +356,40 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    return Math.abs(dx*cos+dy*sin)<=element.width/2+tolerance&&Math.abs(-dx*sin+dy*cos)<=element.height/2+tolerance;
   });
  }
+ function shapeAt(x:number,y:number){
+  if(!api)return null;
+  const candidates=[...api.getSceneElements()].reverse().filter(element=>{
+   if(element.locked||!['rectangle','ellipse','diamond'].includes(element.type))return false;
+   const dx=x-(element.x+element.width/2),dy=y-(element.y+element.height/2);
+   const cos=Math.cos(element.angle),sin=Math.sin(element.angle);
+   const nx=(dx*cos+dy*sin)/(element.width/2),ny=(-dx*sin+dy*cos)/(element.height/2);
+   if(!Number.isFinite(nx)||!Number.isFinite(ny))return false;
+   return element.type==='ellipse'?nx*nx+ny*ny<=1:element.type==='diamond'?Math.abs(nx)+Math.abs(ny)<=1:Math.abs(nx)<=1&&Math.abs(ny)<=1;
+  });
+  return candidates.reduce<typeof candidates[number]|null>((best,element)=>!best||element.width*element.height<best.width*best.height?element:best,null);
+ }
+ function lineAt(x:number,y:number){
+  if(!api)return null;
+  const tolerance=7/api.getAppState().zoom.value;
+  return [...api.getSceneElements()].reverse().find(element=>{
+   if(element.locked||!['arrow','line','freedraw'].includes(element.type)||!('points' in element))return false;
+   const cx=element.x+element.width/2,cy=element.y+element.height/2;
+   const dx=x-cx,dy=y-cy,cos=Math.cos(element.angle),sin=Math.sin(element.angle);
+   const px=dx*cos+dy*sin+cx-element.x,py=-dx*sin+dy*cos+cy-element.y;
+   return element.points.some((point,index)=>{
+    if(index===0)return false;
+    const previous=element.points[index-1],vx=point[0]-previous[0],vy=point[1]-previous[1];
+    const length=vx*vx+vy*vy;
+    const t=length?Math.max(0,Math.min(1,((px-previous[0])*vx+(py-previous[1])*vy)/length)):0;
+    return Math.hypot(px-previous[0]-t*vx,py-previous[1]-t*vy)<=tolerance+element.strokeWidth/2;
+   });
+  })??null;
+ }
  const bindContainedText:NonNullable<ExcalidrawProps['onPointerDown']>=(tool,pointer)=>{
   if(!api||tool.type!=='selection')return;
   if(textAt(pointer.origin.x,pointer.origin.y))return;
-  const hit=pointer.hit.element;
+  if(lineAt(pointer.origin.x,pointer.origin.y))return;
+  const hit=shapeAt(pointer.origin.x,pointer.origin.y)??pointer.hit.element;
   if(!hit||!['rectangle','ellipse','diamond'].includes(hit.type)||hit.customData?.kind==='arc-code-block'||hit.locked||hit.angle!==0||hit.boundElements?.some(item=>item.type==='text'))return;
   const candidates=api.getSceneElements().filter(element=>element.type==='text'&&!element.containerId&&!element.locked&&element.angle===0&&element.x>=hit.x&&element.y>=hit.y&&element.x+element.width<=hit.x+hit.width&&element.y+element.height<=hit.y+hit.height);
   if(candidates.length!==1||candidates[0].type!=='text')return;
@@ -434,16 +464,8 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    const {x,y}=pointer.origin;
    const text=textAt(x,y);
    if(text){setTimeout(()=>{if(!api.getAppState().editingTextElement)api.updateScene({appState:{selectedElementIds:{[text.id]:true}}})},0);return}
-   if(pointer.hit.element)return;
-   const hit=[...api.getSceneElements()].reverse().find(element=>{
-    if(element.isDeleted||element.locked||!['rectangle','ellipse','diamond'].includes(element.type))return false;
-    const cx=element.x+element.width/2,cy=element.y+element.height/2;
-    const dx=x-cx,dy=y-cy,cos=Math.cos(element.angle),sin=Math.sin(element.angle);
-    const nx=(dx*cos+dy*sin)/(element.width/2),ny=(-dx*sin+dy*cos)/(element.height/2);
-    if(!Number.isFinite(nx)||!Number.isFinite(ny))return false;
-    return element.type==='ellipse'?nx*nx+ny*ny<=1:element.type==='diamond'?Math.abs(nx)+Math.abs(ny)<=1:Math.abs(nx)<=1&&Math.abs(ny)<=1;
-   });
-   if(hit)setTimeout(()=>{if(!api.getAppState().editingTextElement)api.updateScene({appState:{selectedElementIds:{[hit.id]:true}}})},0);
+   const hit=lineAt(x,y)??shapeAt(x,y);
+   if(hit&&hit.id!==pointer.hit.element?.id&&!hit.groupIds.length)setTimeout(()=>{if(!api.getAppState().editingTextElement)api.updateScene({appState:{selectedElementIds:{[hit.id]:true}}})},0);
  };
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
