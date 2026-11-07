@@ -92,7 +92,7 @@ function Panel({ width, reduced, children }: { width: MotionValue<number>; reduc
     const observer = new ResizeObserver(() => {
       const next = body.offsetHeight + panel.offsetHeight - panel.clientHeight;
       if (reduced) height.jump(next);
-      else animate(height, next, motionTokens.spring.smooth);
+      else animate(height, next, { type: "spring", visualDuration: .18, bounce: 0 });
     });
     observer.observe(body);
     return () => observer.disconnect();
@@ -229,7 +229,7 @@ export function ExpandingSearch({ label, items, suggestions = [], suggestionsLab
   }, [expandedWidth, width, syncShape]);
 
   // Opening grows on the morph spring with a hint of overshoot; folding back settles without one, so the circle never dips below its own size.
-  const morphTo = (goal: number) => { if (reduced) width.jump(goal); else animate(width, goal, goal >= width.get() ? motionTokens.spring.morph : motionTokens.spring.smooth); };
+  const morphTo = (goal: number) => { if (reduced) width.jump(goal); else animate(width, goal, { type: "spring", visualDuration: .18, bounce: 0 }); };
 
   // Focus moves inside the same click, so touch keyboards open; the field is inert until this flush makes it focusable.
   function expand() {
@@ -293,7 +293,7 @@ export function ExpandingSearch({ label, items, suggestions = [], suggestionsLab
         aria-activedescendant={panelOpen && activeItem ? optionId(activeItem) : undefined}
         autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search"
         initial={false} animate={{ opacity: expanded ? 1 : 0 }}
-        transition={expanded ? { duration: reduced ? .15 : .2, ease: enter, delay: reduced ? 0 : .08 } : { duration: reduced ? .1 : .08, ease: standard }}
+        transition={expanded ? { duration: reduced ? .1 : .1, ease: enter } : { duration: .08, ease: standard }}
         onChange={event => { const next = event.target.value; setQuery(next); setActive(next.trim() ? 0 : -1); keyboard.current = false; }}
         onFocus={() => setFocused(true)}
         onBlur={() => {
