@@ -175,6 +175,22 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    setZoom(percent);
  }
  const selectShapeInterior:NonNullable<ExcalidrawProps['onPointerUp']>=(tool,pointer)=>{
+   if(api&&tool.type==='selection'&&pointer.boxSelection.hasOccurred&&!api.getAppState().editingLinearElement){
+    const left=Math.min(pointer.origin.x,pointer.lastCoords.x),right=Math.max(pointer.origin.x,pointer.lastCoords.x);
+    const top=Math.min(pointer.origin.y,pointer.lastCoords.y),bottom=Math.max(pointer.origin.y,pointer.lastCoords.y);
+    const overlapping=api.getSceneElements().filter(element=>{
+     if(element.isDeleted||element.locked||(element.type==='text'&&element.containerId))return false;
+     const [x1,y1,x2,y2]=getCommonBounds([element]);
+     return x1<=right&&x2>=left&&y1<=bottom&&y2>=top;
+    }).map(element=>element.id);
+    setTimeout(()=>{
+     const state=api.getAppState();
+     const selectedElementIds={...state.selectedElementIds};
+     for(const id of overlapping)selectedElementIds[id]=true;
+     api.updateScene({appState:{selectedElementIds,selectedLinearElement:Object.values(selectedElementIds).filter(Boolean).length>1?null:state.selectedLinearElement}});
+    },0);
+    return;
+   }
    if(!api||tool.type!=='selection'||pointer.hit.element||pointer.drag.hasOccurred||pointer.boxSelection.hasOccurred||pointer.withCmdOrCtrl||modifiedPointer.current)return;
    const {x,y}=pointer.origin;
    const hit=[...api.getSceneElements()].reverse().find(element=>{
