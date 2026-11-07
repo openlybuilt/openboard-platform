@@ -337,6 +337,7 @@ button:not(:disabled):active{transform:scale(.97)}
 .app[data-theme="dark"] .editor-head .save-status[data-status="saving"]{color:#b0b0b0}
 .app[data-theme="dark"] .editor-head .save-status[data-status="saved"]{color:#81d59b}
 @media(max-width:420px){.editor-head{grid-template-columns:48px minmax(0,1fr) 64px}}
+@media(max-width:600px){.editor-head:has(.save-status[data-status="not-saved"]){grid-template-columns:40px minmax(0,1fr) minmax(105px,125px)}.editor-head .save-status[data-status="not-saved"]{white-space:normal;text-align:right;font-size:11px}}
 
 /* Match right-click actions to the rest of the whiteboard's menus. */
 .excalidraw .context-menu{min-width:210px;padding:6px;background:#fff;color:#171717;border:1px solid #d8d8d8;border-radius:1rem;box-shadow:0 8px 28px #0000001c,0 1px 4px #0000000d;font-family:'Inter Variable',Inter,system-ui,sans-serif}
@@ -405,3 +406,8 @@ button:not(:disabled):active{transform:scale(.97)}
 :root:has(.app[data-theme="dark"]) .openboard-color-popup,:root:has(.app[data-theme="dark"]) .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
 .background-options .openboard-color-trigger{width:auto;min-height:0;padding:3px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333}
 .app[data-theme="dark"] .background-options .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
+
+.save-sign-in{appearance:none;background:none;border:0;color:inherit;font:inherit;padding:0;cursor:pointer}
+.save-sign-in span{text-decoration:underline;text-underline-offset:3px}
+.save-sign-in:hover{opacity:.7}
+.save-sign-in:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:2px}
