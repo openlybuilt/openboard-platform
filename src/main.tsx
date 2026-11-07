@@ -1,7 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { ClerkProvider } from '@clerk/react';
 import { App } from './App';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/geist';
 import './style.css';
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+const publishableKey=import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const clerkEnabled=import.meta.env.VITE_CLERK_ENABLED==='true';
+const app=<App authConfigured={clerkEnabled&&Boolean(publishableKey)}/>;
+createRoot(document.getElementById('root')!).render(<React.StrictMode>{clerkEnabled&&publishableKey?<ClerkProvider publishableKey={publishableKey}>{app}</ClerkProvider>:<>{clerkEnabled&&!publishableKey&&<div className="notice" role="alert">Clerk is enabled, but its publishable key is missing. Boards are stored locally.</div>}{app}</>}</React.StrictMode>);
