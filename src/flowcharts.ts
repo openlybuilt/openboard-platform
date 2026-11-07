@@ -1,15 +1,15 @@
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import type { ExcalidrawElementSkeleton } from '@excalidraw/excalidraw/data/transform';
 
-type Node = { x:number; y:number; type?:'rectangle'|'diamond'; width?:number; height?:number };
+type Node = { x:number; y:number; width?:number; height?:number };
 type Layout = { name:string; nodes:Node[]; edges:[number,number][] };
 
 // Layouts follow the flowchart examples in the component gallery.
 export const flowcharts:Layout[]=[
- {name:'Process',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0}],edges:[[0,1],[1,2]]},
- {name:'Branching',nodes:[{x:0,y:100},{x:230,y:100,type:'diamond'},{x:460,y:0},{x:460,y:200}],edges:[[0,1],[1,2],[1,3]]},
- {name:'Pipeline',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0},{x:690,y:0}],edges:[[0,1],[1,2],[2,3]]},
- {name:'Agent workflow',nodes:[{x:40,y:0,width:220},{x:0,y:180,width:300}],edges:[[0,1]]},
+ {name:'Horizontal · 3 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0}],edges:[[0,1],[1,2]]},
+ {name:'Horizontal · branch',nodes:[{x:0,y:100},{x:230,y:100},{x:460,y:0},{x:460,y:200}],edges:[[0,1],[1,2],[1,3]]},
+ {name:'Horizontal · 4 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0},{x:690,y:0}],edges:[[0,1],[1,2],[2,3]]},
+ {name:'Vertical · 2 steps',nodes:[{x:0,y:0},{x:0,y:170}],edges:[[0,1]]},
 ];
 
 export function createFlowchart(layout:Layout,centerX:number,centerY:number){
@@ -18,8 +18,8 @@ export function createFlowchart(layout:Layout,centerX:number,centerY:number){
  const originX=centerX-width/2,originY=centerY-height/2;
  const ids=layout.nodes.map(()=>crypto.randomUUID());
  const shapes:ExcalidrawElementSkeleton[]=layout.nodes.map((node,index)=>({
-  id:ids[index],type:node.type??'rectangle',x:originX+node.x,y:originY+node.y,width:node.width??160,height:node.height??80,
-  strokeColor:'#1e1e1e',backgroundColor:'transparent',roughness:0,strokeWidth:2,
+  id:ids[index],type:'rectangle',x:originX+node.x,y:originY+node.y,width:node.width??160,height:node.height??80,
+  strokeColor:'#1e1e1e',backgroundColor:'#ffffff01',fillStyle:'solid',roughness:0,strokeWidth:2,
  }));
  for(const [from,to] of layout.edges){
   const a=layout.nodes[from],b=layout.nodes[to];
