@@ -7,4 +7,5 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/geist';
 import './style.css';
 const publishableKey=import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-createRoot(document.getElementById('root')!).render(<React.StrictMode>{publishableKey?<ClerkProvider publishableKey={publishableKey}><AuthAwareApp/></ClerkProvider>:<App/>}</React.StrictMode>);
+const clerkEnabled=import.meta.env.VITE_CLERK_ENABLED==='true';
+createRoot(document.getElementById('root')!).render(<React.StrictMode>{clerkEnabled&&publishableKey?<ClerkProvider publishableKey={publishableKey}><AuthAwareApp/></ClerkProvider>:<>{clerkEnabled&&!publishableKey&&<div className="notice" role="alert">Clerk is enabled, but its publishable key is missing. Boards are stored locally.</div>}<App/></>}</React.StrictMode>);
