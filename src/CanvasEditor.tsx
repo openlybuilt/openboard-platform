@@ -6,7 +6,7 @@ import { WakeSlider } from './vendor/bencho/wake-slider';
 import { createFlowchart, flowcharts } from './flowcharts';
 import './vendor/bencho/wake-slider.css';
 import type { ExcalidrawElementSkeleton } from '@excalidraw/excalidraw/data/transform';
-import { ArrowLeft, Menu, MousePointer2, Hand, Square, Diamond, Circle, ArrowUpRight, Minus, Pencil, Type, Frame, Code2, Eraser, Github, Twitter, SlidersHorizontal, Trash2, Workflow, Grid2X2, Check, Plus } from 'lucide-react';
+import { ArrowLeft, Menu, MousePointer2, Hand, Square, Diamond, Circle, ArrowUpRight, Minus, Pencil, Type, Frame, Code2, Eraser, Github, Twitter, SlidersHorizontal, Trash2, Workflow, Grid2X2, Check, Plus, ArrowLeftRight } from 'lucide-react';
 import type { Board, CanvasBackground } from './storage';
 import '@excalidraw/excalidraw/index.css';
 
@@ -43,6 +43,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  const [showProperties,setShowProperties]=useState(false);
  const [selectionPosition,setSelectionPosition]=useState<{x:number;y:number}|null>(null);
  const [connectableId,setConnectableId]=useState<string|null>(null);
+ const [swappableIds,setSwappableIds]=useState<string[]>([]);
  const [codeBlocks,setCodeBlocks]=useState<Array<{id:string;x:number;y:number;width:number;height:number;angle:number;zoom:number;data:Record<string,unknown>}>>([]);
  const [activeTool,setActiveTool]=useState('selection');
  const styleIntent=useRef(false);
@@ -110,6 +111,8 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    const selected=elements.filter(element=>!element.isDeleted && state.selectedElementIds[element.id]);
    const single=selected.length===1?selected[0]:null;
    setConnectableId(single && ['rectangle','diamond','ellipse'].includes(single.type) && single.customData?.kind!=='arc-code-block'?single.id:null);
+   const swappable=selected.length===2&&selected.every(element=>element.type==='rectangle'&&!element.locked&&element.customData?.kind!=='arc-code-block')?selected.map(element=>element.id):[];
+   setSwappableIds(previous=>previous.join()===swappable.join()?previous:swappable);
    if(selected.length && !state.editingTextElement){
      const [,top,right]=getCommonBounds(selected);
      const x=Math.max(80,Math.min(state.width-4,(right+state.scrollX)*state.zoom.value));
@@ -147,6 +150,25 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    const x=state.width/(2*state.zoom.value)-state.scrollX,y=state.height/(2*state.zoom.value)-state.scrollY;
    const created=createFlowchart(flowcharts[index],x,y);
    api.updateScene({elements:[...api.getSceneElementsIncludingDeleted(),...created],captureUpdate:CaptureUpdateAction.IMMEDIATELY});
+ }
+ function swapSteps(){
+   if(!api||swappableIds.length!==2)return;
+   const elements=api.getSceneElementsIncludingDeleted();
+   const [a,b]=swappableIds.map(id=>elements.find(element=>element.id===id&&!element.isDeleted));
+   if(!a||!b||a.type!=='rectangle'||b.type!=='rectangle'||a.locked||b.locked)return;
+   const aText=elements.find(element=>!element.isDeleted&&element.type==='text'&&element.containerId===a.id);
+   const bText=elements.find(element=>!element.isDeleted&&element.type==='text'&&element.containerId===b.id);
+   const style=(element:typeof a)=>({strokeColor:element.strokeColor,backgroundColor:element.backgroundColor,fillStyle:element.fillStyle,strokeWidth:element.strokeWidth,strokeStyle:element.strokeStyle,roughness:element.roughness,opacity:element.opacity,roundness:element.roundness});
+   const bindings=(element:typeof a,textId:string|undefined)=>[...(element.boundElements??[]).filter(binding=>binding.type!=='text'),...(textId?[{id:textId,type:'text' as const}]:[])];
+   const dx=(b.x+b.width/2)-(a.x+a.width/2),dy=(b.y+b.height/2)-(a.y+a.height/2);
+   const swapped=elements.map(element=>{
+    if(element.id===a.id)return newElementWith(element,{...style(b),boundElements:bindings(a,bText?.id)});
+    if(element.id===b.id)return newElementWith(element,{...style(a),boundElements:bindings(b,aText?.id)});
+    if(aText&&element.id===aText.id&&element.type==='text')return newElementWith(element,{containerId:b.id,x:element.x+dx,y:element.y+dy});
+    if(bText&&element.id===bText.id&&element.type==='text')return newElementWith(element,{containerId:a.id,x:element.x-dx,y:element.y-dy});
+    return element;
+   });
+   api.updateScene({elements:swapped,captureUpdate:CaptureUpdateAction.IMMEDIATELY});
  }
  function addConnectedStep(){
    if(!api||!connectableId)return;
@@ -231,6 +253,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   }}/></div></div>)}
   {selectionPosition&&<div className="selection-actions" style={{left:selectionPosition.x,top:selectionPosition.y}}>
    {connectableId&&<button type="button" aria-label="Add connected step" title="Add connected step" onClick={addConnectedStep}><Plus size={16}/></button>}
+   {swappableIds.length===2&&<button type="button" aria-label="Swap steps" title="Swap steps" onClick={swapSteps}><ArrowLeftRight size={16}/></button>}
    <button type="button" aria-label={showProperties?'Close shape settings':'Open shape settings'} title="Shape settings" aria-pressed={showProperties} onClick={()=>setShowProperties(value=>!value)}><SlidersHorizontal size={16}/></button>
    <button type="button" aria-label="Delete selection" title="Delete selection" onClick={()=>canvasRef.current?.querySelector('.excalidraw')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',code:'Delete',bubbles:true}))}><Trash2 size={16}/></button>
   </div>}
