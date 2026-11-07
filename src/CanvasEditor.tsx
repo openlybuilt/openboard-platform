@@ -92,10 +92,14 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  // Excalidraw inverts the canvas in dark mode, including its background.
  useEffect(()=>{if(api)api.updateScene({appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent'}})},[api,theme,background]);
  // A nearly transparent fill makes the entire card draggable without painting behind its rounded corners.
- const initial=useMemo(()=>(board.scene?.elements ?? legacyElements(board)).map(element=>element.customData?.kind==='arc-code-block'?{...element,type:'rectangle' as const,link:null,strokeColor:'transparent',backgroundColor:'#ffffff01',fillStyle:'solid' as const}:element),[board.id]);
+ const initial=useMemo(()=>(board.scene?.elements ?? legacyElements(board)).map(element=>{
+  if(element.customData?.kind==='arc-code-block')return {...element,type:'rectangle' as const,link:null,strokeColor:'transparent',backgroundColor:'#ffffff01',fillStyle:'solid' as const};
+  if(element.type==='rectangle'&&element.backgroundColor==='transparent'&&element.boundElements?.some(binding=>binding.type==='arrow'))return {...element,backgroundColor:'#ffffff01',fillStyle:'solid' as const};
+  return element;
+ }),[board.id]);
  const version=useRef(getSceneVersion(initial));
  useEffect(()=>{
-  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid'))){
+  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid')||element.type==='rectangle'&&element.backgroundColor==='transparent'&&element.boundElements?.some(binding=>binding.type==='arrow'))){
    update({...boardRef.current,scene:{...boardRef.current.scene,elements:initial}});
   }
  },[initial,update]);
@@ -151,10 +155,18 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    const created=createFlowchart(flowcharts[index],x,y);
    api.updateScene({elements:[...api.getSceneElementsIncludingDeleted(),...created],captureUpdate:CaptureUpdateAction.IMMEDIATELY});
  }
- function swapSteps(){
-   if(!api||swappableIds.length!==2)return;
-   const elements=api.getSceneElementsIncludingDeleted();
-   const [a,b]=swappableIds.map(id=>elements.find(element=>element.id===id&&!element.isDeleted));
+ function swapSteps(ids:string[],originals?:Parameters<NonNullable<ExcalidrawProps['onPointerUp']>>[1]['originalElements']){
+   if(!api||ids.length!==2)return;
+   const current=api.getSceneElementsIncludingDeleted();
+   const dragged=originals?.get(ids[0]);
+   const restoreIds=new Set([ids[0],...(dragged?.boundElements??[]).map(binding=>binding.id)]);
+   const elements=originals?current.map(element=>{
+    const original=restoreIds.has(element.id)?originals.get(element.id):undefined;
+    if(!original)return element;
+    const {index:_index,version:_version,versionNonce:_nonce,updated:_updated,...restore}=original;
+    return newElementWith(element,restore);
+   }):current;
+   const [a,b]=ids.map(id=>elements.find(element=>element.id===id&&!element.isDeleted));
    if(!a||!b||a.type!=='rectangle'||b.type!=='rectangle'||a.locked||b.locked)return;
    const aText=elements.find(element=>!element.isDeleted&&element.type==='text'&&element.containerId===a.id);
    const bText=elements.find(element=>!element.isDeleted&&element.type==='text'&&element.containerId===b.id);
@@ -170,6 +182,21 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    });
    api.updateScene({elements:swapped,captureUpdate:CaptureUpdateAction.IMMEDIATELY});
  }
+ useEffect(()=>{
+   if(!api)return;
+   return api.onPointerUp((tool,pointer,event)=>{
+    if(tool.type!=='selection'||!pointer.drag.hasOccurred||pointer.resize.isResizing||pointer.hit.hasBeenDuplicated||pointer.withCmdOrCtrl)return;
+    const selected=Object.entries(api.getAppState().selectedElementIds).filter(([,value])=>value).map(([id])=>id);
+    if(selected.length!==1)return;
+    const source=pointer.originalElements.get(selected[0]);
+    if(!source||source.type!=='rectangle'||source.locked||source.customData?.kind==='arc-code-block'||!source.boundElements?.some(binding=>binding.type==='arrow'))return;
+    const state=api.getAppState();
+    const x=(event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX;
+    const y=(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY;
+    const target=[...pointer.originalElements.values()].reverse().find(element=>element.id!==source.id&&element.type==='rectangle'&&!element.locked&&element.customData?.kind!=='arc-code-block'&&element.boundElements?.some(binding=>binding.type==='arrow')&&x>=element.x&&x<=element.x+element.width&&y>=element.y&&y<=element.y+element.height);
+    if(target)setTimeout(()=>swapSteps([source.id,target.id],pointer.originalElements),0);
+   });
+ },[api]);
  function addConnectedStep(){
    if(!api||!connectableId)return;
    const elements=api.getSceneElementsIncludingDeleted();
@@ -182,7 +209,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    const id=crypto.randomUUID();
    const [placeholder,step,arrow]=convertToExcalidrawElements([
     {id:source.id,type:source.type as 'rectangle'|'diamond'|'ellipse',x:source.x,y:source.y,width:source.width,height:source.height},
-    {id,type:'rectangle',x,y,width,height,strokeColor:source.strokeColor,backgroundColor:'transparent',roughness:0,strokeWidth:2},
+    {id,type:'rectangle',x,y,width,height,strokeColor:source.strokeColor,backgroundColor:'#ffffff01',fillStyle:'solid',roughness:0,strokeWidth:2},
     {type:'arrow',x:source.x+source.width+4,y:source.y+source.height/2,points:[[0,0],[x-source.x-source.width-8,y+height/2-source.y-source.height/2]],start:{id:source.id},end:{id},roughness:0,strokeColor:source.strokeColor,strokeWidth:2},
    ],{regenerateIds:false});
    const boundElements=[...(source.boundElements??[]),...(placeholder.boundElements??[])];
@@ -253,7 +280,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   }}/></div></div>)}
   {selectionPosition&&<div className="selection-actions" style={{left:selectionPosition.x,top:selectionPosition.y}}>
    {connectableId&&<button type="button" aria-label="Add connected step" title="Add connected step" onClick={addConnectedStep}><Plus size={16}/></button>}
-   {swappableIds.length===2&&<button type="button" aria-label="Swap steps" title="Swap steps" onClick={swapSteps}><ArrowLeftRight size={16}/></button>}
+   {swappableIds.length===2&&<button type="button" aria-label="Swap steps" title="Swap steps" onClick={()=>swapSteps(swappableIds)}><ArrowLeftRight size={16}/></button>}
    <button type="button" aria-label={showProperties?'Close shape settings':'Open shape settings'} title="Shape settings" aria-pressed={showProperties} onClick={()=>setShowProperties(value=>!value)}><SlidersHorizontal size={16}/></button>
    <button type="button" aria-label="Delete selection" title="Delete selection" onClick={()=>canvasRef.current?.querySelector('.excalidraw')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',code:'Delete',bubbles:true}))}><Trash2 size={16}/></button>
   </div>}

@@ -19,7 +19,7 @@ export function createFlowchart(layout:Layout,centerX:number,centerY:number){
  const ids=layout.nodes.map(()=>crypto.randomUUID());
  const shapes:ExcalidrawElementSkeleton[]=layout.nodes.map((node,index)=>({
   id:ids[index],type:'rectangle',x:originX+node.x,y:originY+node.y,width:node.width??160,height:node.height??80,
-  strokeColor:'#1e1e1e',backgroundColor:'transparent',roughness:0,strokeWidth:2,
+  strokeColor:'#1e1e1e',backgroundColor:'#ffffff01',fillStyle:'solid',roughness:0,strokeWidth:2,
  }));
  for(const [from,to] of layout.edges){
   const a=layout.nodes[from],b=layout.nodes[to];
