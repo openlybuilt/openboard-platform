@@ -30,13 +30,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Prepare isolated Wrangler directory
-        run: mkdir -p "$RUNNER_TEMP/openboard-wrangler"
+        run: |
+          mkdir -p .wrangler-install
+          printf '{"private":true}\n' > .wrangler-install/package.json
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: ${{ runner.temp }}/openboard-wrangler
+          workingDirectory: .wrangler-install
           packageManager: npm
           wranglerVersion: 4.158.0
           command: pages deploy ${{ github.workspace }}/dist --project-name=openboard
