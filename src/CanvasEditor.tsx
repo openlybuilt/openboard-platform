@@ -44,6 +44,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  const [selectionPosition,setSelectionPosition]=useState<{x:number;y:number}|null>(null);
  const [connectableId,setConnectableId]=useState<string|null>(null);
  const [swappableIds,setSwappableIds]=useState<string[]>([]);
+ const [swapTarget,setSwapTarget]=useState<{x:number;y:number;width:number;height:number;angle:number}|null>(null);
  const [codeBlocks,setCodeBlocks]=useState<Array<{id:string;x:number;y:number;width:number;height:number;angle:number;zoom:number;data:Record<string,unknown>}>>([]);
  const [activeTool,setActiveTool]=useState('selection');
  const styleIntent=useRef(false);
@@ -184,18 +185,42 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  }
  useEffect(()=>{
    if(!api)return;
-   return api.onPointerUp((tool,pointer,event)=>{
-    if(tool.type!=='selection'||!pointer.drag.hasOccurred||pointer.resize.isResizing||pointer.hit.hasBeenDuplicated||pointer.withCmdOrCtrl)return;
+   let stopTracking=()=>{};
+   const findTarget=(pointer:Parameters<NonNullable<ExcalidrawProps['onPointerUp']>>[1],event:PointerEvent)=>{
+    if(!pointer.drag.hasOccurred||pointer.resize.isResizing||pointer.hit.hasBeenDuplicated||pointer.withCmdOrCtrl)return null;
     const selected=Object.entries(api.getAppState().selectedElementIds).filter(([,value])=>value).map(([id])=>id);
-    if(selected.length!==1)return;
+    if(selected.length!==1)return null;
     const source=pointer.originalElements.get(selected[0]);
-    if(!source||source.type!=='rectangle'||source.locked||source.customData?.kind==='arc-code-block'||!source.boundElements?.some(binding=>binding.type==='arrow'))return;
+    if(!source||source.type!=='rectangle'||source.locked||source.customData?.kind==='arc-code-block'||!source.boundElements?.some(binding=>binding.type==='arrow'))return null;
     const state=api.getAppState();
     const x=(event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX;
     const y=(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY;
     const target=[...pointer.originalElements.values()].reverse().find(element=>element.id!==source.id&&element.type==='rectangle'&&!element.locked&&element.customData?.kind!=='arc-code-block'&&element.boundElements?.some(binding=>binding.type==='arrow')&&x>=element.x&&x<=element.x+element.width&&y>=element.y&&y<=element.y+element.height);
-    if(target)setTimeout(()=>swapSteps([source.id,target.id],pointer.originalElements),0);
+    return target?{source,target,state}:null;
+   };
+   const unsubscribeDown=api.onPointerDown((tool,pointer,event)=>{
+    stopTracking();
+    if(tool.type!=='selection')return;
+    const pointerId=event.pointerId;
+    const move=(moveEvent:PointerEvent)=>{
+     if(moveEvent.pointerId!==pointerId)return;
+     const match=findTarget(pointer,moveEvent),bounds=canvasRef.current?.getBoundingClientRect();
+     if(!match||!bounds){setSwapTarget(null);return}
+     const {target,state}=match,scale=state.zoom.value;
+     setSwapTarget({x:state.offsetLeft-bounds.left+(target.x+state.scrollX)*scale,y:state.offsetTop-bounds.top+(target.y+state.scrollY)*scale,width:target.width*scale,height:target.height*scale,angle:target.angle});
+    };
+    const finish=(endEvent:PointerEvent)=>{if(endEvent.pointerId===pointerId)stopTracking()};
+    stopTracking=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish);setSwapTarget(null)};
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',finish);
+    window.addEventListener('pointercancel',finish);
    });
+   const unsubscribeUp=api.onPointerUp((tool,pointer,event)=>{
+    if(tool.type!=='selection')return;
+    const match=findTarget(pointer,event);
+    if(match)setTimeout(()=>swapSteps([match.source.id,match.target.id],pointer.originalElements),0);
+   });
+   return ()=>{stopTracking();unsubscribeDown();unsubscribeUp()};
  },[api]);
  function addConnectedStep(){
    if(!api||!connectableId)return;
@@ -274,6 +299,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
       <MainMenu.DefaultItems.ToggleTheme onSelect={onThemeChange}/>
     </MainMenu>
   </Excalidraw>
+  {swapTarget&&<div className="swap-target-outline" aria-hidden="true" style={{left:swapTarget.x,top:swapTarget.y,width:swapTarget.width,height:swapTarget.height,transform:`rotate(${swapTarget.angle}rad)`}}/>}
   {codeBlocks.map(block=><div key={block.id} className="native-code-position" style={{left:block.x,top:block.y,width:block.width*block.zoom,height:block.height*block.zoom,transform:`rotate(${block.angle}rad)`}}><div className="native-code-scale" style={{width:block.width,height:block.height,transform:`scale(${block.zoom})`}}><BoardCodeBlock code={String(block.data.code??'')} filename={String(block.data.filename??'')} language={String(block.data.language??'python')} onSave={(code,filename,language)=>{
    if(!api)return;
    api.updateScene({elements:api.getSceneElementsIncludingDeleted().map(item=>item.id===block.id?newElementWith(item,{customData:{...item.customData,code,filename,language}}):item),captureUpdate:CaptureUpdateAction.IMMEDIATELY});

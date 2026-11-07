@@ -184,6 +184,8 @@ button:not(:disabled):active{transform:scale(.97)}
 .excalidraw.theme--dark .HelpDialog__key{background:#484848;color:#f3f3f3}
 
 .selection-actions{position:absolute;z-index:16;display:flex;gap:3px;padding:3px;transform:translate(-100%,calc(-100% - 8px));background:#fff;border:1px solid #d8d8d8;border-radius:.85rem;box-shadow:0 6px 18px #00000010}
+.swap-target-outline{position:absolute;z-index:15;pointer-events:none;border:3px solid #1769e0;border-radius:7px;box-shadow:0 0 0 3px #fff;transition:opacity 120ms ease}
+.app[data-theme="dark"] .swap-target-outline{border-color:#83b4ff;box-shadow:0 0 0 3px #1e1e1e}
 .selection-actions button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:.6rem;background:transparent;color:#222}
 .selection-actions button:hover,.selection-actions button[aria-pressed="true"]{background:#ededed}
 .app[data-theme="dark"] .selection-actions{background:#2c2c2c;border-color:#494949}
