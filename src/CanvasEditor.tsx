@@ -50,6 +50,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  const [pageOrientation,setPageOrientation]=useState<'none'|'portrait'|'landscape'>('none');
  const [colorSelection,setColorSelection]=useState<{id:string;stroke:string;fill:string;canFill:boolean;labelId?:string;labelColor?:string}|null>(null);
  const [selectedText,setSelectedText]=useState<ExcalidrawTextElement|null>(null);
+ const lastTextClick=useRef<{id:string;time:number}|null>(null);
  const [richText,setRichText]=useState<Array<{element:ExcalidrawTextElement;x:number;y:number;zoom:number;editing:boolean}>>([]);
  const [gridView,setGridView]=useState({size:24,x:0,y:0});
  const [zoom,setZoom]=useState(100);
@@ -358,6 +359,25 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    return element;
   }),captureUpdate:CaptureUpdateAction.IMMEDIATELY});
  };
+ function selectTextInTextTool(event:ReactPointerEvent<HTMLDivElement>){
+  if(!api||event.button!==0||event.detail>1||event.shiftKey||event.altKey||event.ctrlKey||event.metaKey||!(event.target instanceof HTMLCanvasElement))return;
+  const state=api.getAppState();
+  if(state.activeTool.type!=='text'||state.editingTextElement)return;
+  const x=(event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX;
+  const y=(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY;
+  const text=[...api.getSceneElements()].reverse().find(element=>{
+   if(element.type!=='text'||element.locked)return false;
+   const dx=x-(element.x+element.width/2),dy=y-(element.y+element.height/2);
+   const cos=Math.cos(element.angle),sin=Math.sin(element.angle);
+   return Math.abs(dx*cos+dy*sin)<=element.width/2&&Math.abs(-dx*sin+dy*cos)<=element.height/2;
+  });
+  if(!text||text.type!=='text')return;
+  if(lastTextClick.current?.id===text.id&&event.timeStamp-lastTextClick.current.time<450){lastTextClick.current=null;return}
+  lastTextClick.current={id:text.id,time:event.timeStamp};
+  const container=text.containerId&&api.getSceneElements().find(element=>element.id===text.containerId&&!element.locked);
+  event.preventDefault();event.stopPropagation();
+  api.updateScene({appState:{selectedElementIds:{[(container||text).id]:true}}});
+ }
  const selectShapeInterior:NonNullable<ExcalidrawProps['onPointerUp']>=(tool,pointer)=>{
    if(api&&tool.type==='selection'&&pointer.boxSelection.hasOccurred&&!api.getAppState().editingLinearElement){
     const left=Math.min(pointer.origin.x,pointer.lastCoords.x),right=Math.max(pointer.origin.x,pointer.lastCoords.x);
@@ -390,7 +410,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
  function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
- return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey}} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
+ return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
   <input ref={importRef} type="file" accept=".openboard,.excalidraw,application/json" hidden onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void openDiagram(file)}}/>
   <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',currentItemBackgroundColor:'#ffffff01',currentItemFillStyle:'solid',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerDown={bindContainedText} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}/>
   {richText.map(({element,x,y,zoom,editing})=>{const style=textStyle(element);if(!style||editing)return null;return <div key={element.id} className="rich-text-overlay" aria-hidden="true" style={{left:x,top:y,width:element.width*zoom,height:element.height*zoom,fontFamily:fontName(element.fontFamily),fontSize:element.fontSize*zoom,lineHeight:element.lineHeight,color:style.color,fontWeight:style.bold?700:400,fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:element.textAlign as CSSProperties['textAlign'],opacity:element.opacity/100,transform:`rotate(${element.angle}rad)`}}>{element.text}</div>})}
