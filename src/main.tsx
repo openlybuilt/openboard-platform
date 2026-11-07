@@ -1,7 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { ClerkProvider } from '@clerk/react';
 import { App } from './App';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/geist';
 import './style.css';
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+const publishableKey=import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const app=<App authConfigured={Boolean(publishableKey)}/>;
+createRoot(document.getElementById('root')!).render(<React.StrictMode>{publishableKey?<ClerkProvider publishableKey={publishableKey}>{app}</ClerkProvider>:app}</React.StrictMode>);
