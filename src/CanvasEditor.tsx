@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { Excalidraw, convertToExcalidrawElements, getSceneVersion, getCommonBounds, FONT_FAMILY, newElementWith, CaptureUpdateAction, loadFromBlob } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI, ExcalidrawProps } from '@excalidraw/excalidraw/types';
 import { BoardCodeBlock } from './BoardCodeBlock';
+import { ColorPicker } from './ColorPicker';
 import { WakeSlider } from './vendor/bencho/wake-slider';
 import { createFlowchart, flowcharts } from './flowcharts';
 import './vendor/bencho/wake-slider.css';
@@ -77,7 +78,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   setShowProperties(false);
  };
  useEffect(()=>{
-  const closeOutside=(event:PointerEvent)=>{if(event.target instanceof Node&&!dockRef.current?.contains(event.target)){setOpen(false);setFlowchartsOpen(false);setBackgroundOpen(false)}};
+  const closeOutside=(event:PointerEvent)=>{if(event.target instanceof Node&&!dockRef.current?.contains(event.target)&&!(event.target instanceof Element&&event.target.closest('.openboard-color-popup'))){setOpen(false);setFlowchartsOpen(false);setBackgroundOpen(false)}};
   document.addEventListener('pointerdown',closeOutside);
   return ()=>document.removeEventListener('pointerdown',closeOutside);
  },[]);
@@ -417,9 +418,9 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   <BoardMenu api={api} name={board.name} theme={theme} canvasColor={board.canvasColor} background={background} onThemeChange={onThemeChange} onOpen={()=>importRef.current?.click()} onShow={clearSelection}/>
   {importError&&<div className="board-menu-error" role="alert">{importError}<button type="button" onClick={()=>setImportError('')} aria-label="Dismiss error">×</button></div>}
   {showProperties&&colorSelection&&<div className="custom-colors" role="group" aria-label="Custom colors">
-   <label>{colorSelection.canFill?'Stroke':'Text color'}<input type="color" aria-label={colorSelection.canFill?'Custom stroke color':'Custom text color'} value={/^#[0-9a-f]{6}$/i.test(colorSelection.stroke)?colorSelection.stroke:'#000000'} onChange={event=>setColor(colorSelection.id,'strokeColor',event.target.value)}/></label>
-   {colorSelection.canFill&&<label>Fill<input type="color" aria-label="Custom fill color" value={/^#[0-9a-f]{6}$/i.test(colorSelection.fill)?colorSelection.fill:'#ffffff'} onChange={event=>setColor(colorSelection.id,'backgroundColor',event.target.value)}/></label>}
-   {colorSelection.labelId&&<label>Text<input type="color" aria-label="Custom text color" value={/^#[0-9a-f]{6}$/i.test(colorSelection.labelColor??'')?colorSelection.labelColor:'#000000'} onChange={event=>setColor(colorSelection.labelId!,'strokeColor',event.target.value)}/></label>}
+   <ColorPicker label={colorSelection.canFill?'Stroke':'Text'} value={colorSelection.stroke} onChange={color=>setColor(colorSelection.id,'strokeColor',color)}/>
+   {colorSelection.canFill&&<ColorPicker label="Fill" allowTransparent value={colorSelection.fill} onChange={color=>setColor(colorSelection.id,'backgroundColor',color)}/>}
+   {colorSelection.labelId&&<ColorPicker label="Text" value={colorSelection.labelColor??'#000000'} onChange={color=>setColor(colorSelection.labelId!,'strokeColor',color)}/>}
    {selectedText&&<><div className="text-style-controls" role="group" aria-label="Text style">
     <button type="button" aria-label="Bold" aria-pressed={textStyle(selectedText)?.bold??false} onClick={()=>updateTextStyle({bold:!textStyle(selectedText)?.bold})}><b>B</b></button>
     <button type="button" aria-label="Italic" aria-pressed={textStyle(selectedText)?.italic??false} onClick={()=>updateTextStyle({italic:!textStyle(selectedText)?.italic})}><i>I</i></button>
@@ -446,7 +447,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
     <div id="drawing-tools" className="tools" aria-label="Drawing tools">{choices.map(({type,label,Icon})=><button key={type} onClick={()=>{setShowProperties(false);if(api)api.updateScene({appState:{...api.getAppState(),...preferences.current}});api?.setActiveTool({type,locked:type!=='selection'&&type!=='hand'})}} aria-pressed={activeTool===type} aria-label={label} title={label}><Icon size={18}/><span className="tool-label">{label}</span></button>)}<button onClick={insertCodeBlock} aria-label="Add code block" title="Add code block"><Code2 size={18}/><span className="tool-label">Code block</span></button></div>
    </div>
    <div id="flowchart-options" className={`flowchart-options ${flowchartsOpen?'is-open':'is-closed'}`} inert={!flowchartsOpen} aria-hidden={!flowchartsOpen}>{flowcharts.map((flowchart,index)=><button key={flowchart.name} onClick={()=>insertFlowchart(index)} aria-label={`Add ${flowchart.name.toLowerCase()} flowchart`}>{flowchart.name}</button>)}</div>
-   <div id="background-options" className={`flowchart-options background-options ${backgroundOpen?'is-open':'is-closed'}`} inert={!backgroundOpen} aria-hidden={!backgroundOpen} role="group" aria-label="Canvas background">{([['plain','Plain'],['dots','Dots'],['grid','Square grid']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={background===value} onClick={()=>chooseBackground(value)}>{label}{background===value&&<Check size={15}/>}</button>)}<label className="canvas-color-picker">Canvas color<input type="color" aria-label="Canvas color" value={board.canvasColor??'#ffffff'} onChange={event=>update({...boardRef.current,canvasColor:event.target.value})}/></label>{board.canvasColor&&<button type="button" onClick={()=>update({...boardRef.current,canvasColor:undefined})}>Default canvas color</button>}<div className="background-option-heading">Page</div>{([['none','Infinite canvas'],['portrait','Portrait'],['landscape','Landscape']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={pageOrientation===value} onClick={()=>choosePage(value)}>{label}{pageOrientation===value&&<Check size={15}/>}</button>)}</div>
+   <div id="background-options" className={`flowchart-options background-options ${backgroundOpen?'is-open':'is-closed'}`} inert={!backgroundOpen} aria-hidden={!backgroundOpen} role="group" aria-label="Canvas background">{([['plain','Plain'],['dots','Dots'],['grid','Square grid']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={background===value} onClick={()=>chooseBackground(value)}>{label}{background===value&&<Check size={15}/>}</button>)}<ColorPicker label="Canvas" value={board.canvasColor??'#ffffff'} onChange={color=>update({...boardRef.current,canvasColor:color})}/>{board.canvasColor&&<button type="button" onClick={()=>update({...boardRef.current,canvasColor:undefined})}>Default canvas color</button>}<div className="background-option-heading">Page</div>{([['none','Infinite canvas'],['portrait','Portrait'],['landscape','Landscape']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={pageOrientation===value} onClick={()=>choosePage(value)}>{label}{pageOrientation===value&&<Check size={15}/>}</button>)}</div>
   </div>
  </div></main>;
 }
