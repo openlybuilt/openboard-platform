@@ -411,3 +411,10 @@ button:not(:disabled):active{transform:scale(.97)}
 .save-sign-in span{text-decoration:underline;text-underline-offset:3px}
 .save-sign-in:hover{opacity:.7}
 .save-sign-in:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:2px}
+
+/* Arc expanding search, adapted to OpenBoard's light and dark surfaces. */
+.board-list-controls{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex:1;min-width:0}
+.board-list-controls .board-search{flex:1;max-width:300px;min-width:44px;--control-height-md:44px;--border:#d4d4d4;--border-strong:#999;--surface:#fff;--surface-raised:#fff;--surface-muted:#f5f5f5;--foreground:#111;--text-secondary:#555;--text-muted:#737373;--focus-ring:#0002;--radius-control:12px;--radius-panel:14px;--radius-pill:999px;--shadow-floating:0 10px 30px #0002;--duration-fast:160ms;--duration-standard:240ms;--duration-instant:120ms;--duration-spring:240ms;--ease-standard:ease;--ease-spring:ease;--text-sm:14px;--text-xs:12px;--tracking-body:0;--leading-body:1.4}
+.section-heading .board-search span{color:inherit}
+.app[data-theme="dark"] .board-list-controls .board-search{--border:#505050;--border-strong:#888;--surface:#2c2c2c;--surface-raised:#353535;--surface-muted:#404040;--foreground:#f3f3f3;--text-secondary:#ccc;--text-muted:#aaa;--focus-ring:#fff3;--shadow-floating:0 10px 30px #0008}
+@media(max-width:520px){.board-actions{gap:10px}.board-list-controls{gap:8px}.board-list-controls .primary{padding:10px 12px;font-size:12px;white-space:nowrap}}
