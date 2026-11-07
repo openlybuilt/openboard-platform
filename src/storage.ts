@@ -14,18 +14,21 @@ export function loadBoards(): Board[] {
 export function saveBoards(boards: Board[]) { localStorage.setItem(KEY, JSON.stringify(boards)); }
 // Reconcile individual boards against the snapshot this tab last loaded. Never
 // replace an entire, potentially newer collection with a stale tab's snapshot.
-export function reconcileLocalBoards(previous: Board[], next: Board[]) {
+export function boardSnapshots(boards: Board[]) {
+  return new Map(boards.map(board => [board.id, JSON.stringify(board)]));
+}
+export function reconcileLocalBoards(previous: Board[], next: Board[], snapshots: Map<string, string>) {
   const latest = loadBoards();
   const before = new Map(previous.map(board => [board.id, board]));
   const after = new Map(next.map(board => [board.id, board]));
   const merged = new Map(latest.map(board => [board.id, board]));
   const conflicts = new Map<string, string>();
-  const same = (a: Board | undefined, b: Board | undefined) => JSON.stringify(a) === JSON.stringify(b);
+  const matchesSaved = (id: string, current: Board | undefined) => snapshots.get(id) === (current ? JSON.stringify(current) : undefined);
   for (const board of next) {
     const original = before.get(board.id);
     if (original === board) continue;
     const current = merged.get(board.id);
-    if (original && !same(original, current)) {
+    if (original && !matchesSaved(board.id, current)) {
       const copy = {...board, id: crypto.randomUUID(), name: `${board.name.slice(0, 83)} (conflict copy)`, updatedAt: Date.now()};
       merged.set(copy.id, copy);
       conflicts.set(board.id, copy.id);
@@ -37,7 +40,7 @@ export function reconcileLocalBoards(previous: Board[], next: Board[]) {
   }
   for (const board of previous) {
     if (after.has(board.id)) continue;
-    if (!same(board, merged.get(board.id))) throw new Error('This board changed in another tab and was not deleted.');
+    if (!matchesSaved(board.id, merged.get(board.id))) throw new Error('This board changed in another tab and was not deleted.');
     merged.delete(board.id);
   }
   const boards = [...merged.values()];
