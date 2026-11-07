@@ -406,3 +406,7 @@ button:not(:disabled):active{transform:scale(.97)}
 :root:has(.app[data-theme="dark"]) .openboard-color-popup,:root:has(.app[data-theme="dark"]) .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
 .background-options .openboard-color-trigger{width:auto;min-height:0;padding:3px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333}
 .app[data-theme="dark"] .background-options .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
+
+.save-sign-in{appearance:none;background:none;border:0;color:inherit;font:inherit;padding:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.save-sign-in:hover{opacity:.7}
+.save-sign-in:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:2px}
