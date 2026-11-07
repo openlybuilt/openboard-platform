@@ -6,10 +6,10 @@ type Layout = { name:string; nodes:Node[]; edges:[number,number][] };
 
 // Layouts follow the flowchart examples in the component gallery.
 export const flowcharts:Layout[]=[
- {name:'3 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0}],edges:[[0,1],[1,2]]},
- {name:'Decision with 2 paths',nodes:[{x:0,y:100},{x:230,y:100,type:'diamond'},{x:460,y:0},{x:460,y:200}],edges:[[0,1],[1,2],[1,3]]},
- {name:'4 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0},{x:690,y:0}],edges:[[0,1],[1,2],[2,3]]},
- {name:'2 vertical steps',nodes:[{x:0,y:0},{x:0,y:170}],edges:[[0,1]]},
+ {name:'Horizontal · 3 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0}],edges:[[0,1],[1,2]]},
+ {name:'Horizontal · branch',nodes:[{x:0,y:100},{x:230,y:100,type:'diamond'},{x:460,y:0},{x:460,y:200}],edges:[[0,1],[1,2],[1,3]]},
+ {name:'Horizontal · 4 steps',nodes:[{x:0,y:0},{x:230,y:0},{x:460,y:0},{x:690,y:0}],edges:[[0,1],[1,2],[2,3]]},
+ {name:'Vertical · 2 steps',nodes:[{x:0,y:0},{x:0,y:170}],edges:[[0,1]]},
 ];
 
 export function createFlowchart(layout:Layout,centerX:number,centerY:number){
