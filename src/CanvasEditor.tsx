@@ -347,8 +347,18 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    api.updateScene({appState:{zoom:{...state.zoom,value:next as typeof state.zoom.value},scrollX:state.scrollX+state.width/(2*next)-state.width/(2*previous),scrollY:state.scrollY+state.height/(2*next)-state.height/(2*previous)}});
    setZoom(percent);
  }
+ function textAt(x:number,y:number){
+  const tolerance=api?6/api.getAppState().zoom.value:0;
+  return api&&[...api.getSceneElements()].reverse().find(element=>{
+   if(element.type!=='text'||element.locked)return false;
+   const dx=x-(element.x+element.width/2),dy=y-(element.y+element.height/2);
+   const cos=Math.cos(element.angle),sin=Math.sin(element.angle);
+   return Math.abs(dx*cos+dy*sin)<=element.width/2+tolerance&&Math.abs(-dx*sin+dy*cos)<=element.height/2+tolerance;
+  });
+ }
  const bindContainedText:NonNullable<ExcalidrawProps['onPointerDown']>=(tool,pointer)=>{
   if(!api||tool.type!=='selection')return;
+  if(textAt(pointer.origin.x,pointer.origin.y))return;
   const hit=pointer.hit.element;
   if(!hit||!['rectangle','ellipse','diamond'].includes(hit.type)||hit.customData?.kind==='arc-code-block'||hit.locked||hit.angle!==0||hit.boundElements?.some(item=>item.type==='text'))return;
   const candidates=api.getSceneElements().filter(element=>element.type==='text'&&!element.containerId&&!element.locked&&element.angle===0&&element.x>=hit.x&&element.y>=hit.y&&element.x+element.width<=hit.x+hit.width&&element.y+element.height<=hit.y+hit.height);
@@ -366,18 +376,12 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   if(state.activeTool.type!=='text'||state.editingTextElement)return;
   const x=(event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX;
   const y=(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY;
-  const text=[...api.getSceneElements()].reverse().find(element=>{
-   if(element.type!=='text'||element.locked)return false;
-   const dx=x-(element.x+element.width/2),dy=y-(element.y+element.height/2);
-   const cos=Math.cos(element.angle),sin=Math.sin(element.angle);
-   return Math.abs(dx*cos+dy*sin)<=element.width/2&&Math.abs(-dx*sin+dy*cos)<=element.height/2;
-  });
+  const text=textAt(x,y);
   if(!text||text.type!=='text')return;
   if(lastTextClick.current?.id===text.id&&event.timeStamp-lastTextClick.current.time<450){lastTextClick.current=null;return}
   lastTextClick.current={id:text.id,time:event.timeStamp};
-  const container=text.containerId&&api.getSceneElements().find(element=>element.id===text.containerId&&!element.locked);
   event.preventDefault();event.stopPropagation();
-  api.updateScene({appState:{selectedElementIds:{[(container||text).id]:true}}});
+  api.updateScene({appState:{selectedElementIds:{[text.id]:true}}});
  }
  const selectShapeInterior:NonNullable<ExcalidrawProps['onPointerUp']>=(tool,pointer)=>{
    if(api&&tool.type==='selection'&&pointer.boxSelection.hasOccurred&&!api.getAppState().editingLinearElement){
@@ -396,8 +400,11 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
     },0);
     return;
    }
-   if(!api||tool.type!=='selection'||pointer.hit.element||pointer.drag.hasOccurred||pointer.boxSelection.hasOccurred||pointer.withCmdOrCtrl||modifiedPointer.current)return;
+   if(!api||tool.type!=='selection'||pointer.drag.hasOccurred||pointer.boxSelection.hasOccurred||pointer.withCmdOrCtrl||modifiedPointer.current)return;
    const {x,y}=pointer.origin;
+   const text=textAt(x,y);
+   if(text){setTimeout(()=>{if(!api.getAppState().editingTextElement)api.updateScene({appState:{selectedElementIds:{[text.id]:true}}})},0);return}
+   if(pointer.hit.element)return;
    const hit=[...api.getSceneElements()].reverse().find(element=>{
     if(element.isDeleted||element.locked||!['rectangle','ellipse','diamond'].includes(element.type))return false;
     const cx=element.x+element.width/2,cy=element.y+element.height/2;
