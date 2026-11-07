@@ -3,6 +3,7 @@ import { CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, exportT
 import type { DataURL, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { FileId } from '@excalidraw/excalidraw/element/types';
 import { Ellipsis, FileDown, FolderOpen, Github, HelpCircle, Image, Moon, Search, Sun, Trash2, Twitter, X } from 'lucide-react';
+import { renderStyledText } from './text-format';
 
 function download(blob: Blob, filename: string) {
  const url=URL.createObjectURL(blob);
@@ -21,7 +22,7 @@ async function writeFile(handle:FileSystemFileHandle|null,blob:Blob,filename:str
  try{await writable.write(blob);await writable.close()}catch(error){await writable.abort();throw error}
 }
 
-export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:ExcalidrawImperativeAPI|null;name:string;theme:'light'|'dark';onThemeChange:(theme:'light'|'dark')=>void;onOpen:()=>void;onShow:()=>void}) {
+export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,onOpen,onShow}:{api:ExcalidrawImperativeAPI|null;name:string;theme:'light'|'dark';canvasColor?:string;background:string;onThemeChange:(theme:'light'|'dark')=>void;onOpen:()=>void;onShow:()=>void}) {
  const [open,setOpen]=useState(false);
  const [panel,setPanel]=useState<'search'|'help'|'export'|'reset'|'open'|null>(null);
  const [query,setQuery]=useState('');
@@ -46,7 +47,9 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
    const target=`${filename}.${format}`;
    const destination=await chooseDestination(target,format==='openboard'?'OpenBoard file':'Excalidraw file','application/json',`.${format}`);
    const {elements,files}=format==='excalidraw'?prepareExport():{elements:api.getSceneElementsIncludingDeleted(),files:api.getFiles()};
-   await writeFile(destination,new Blob([serializeAsJSON(elements,api.getAppState(),files,'local')],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
+   const serialized=serializeAsJSON(elements,api.getAppState(),files,'local');
+   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor}}):serialized;
+   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
   }
   catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this whiteboard. Please try again.');setOpen(false)}
  }
@@ -71,7 +74,7 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
     files[id]={id,mimeType:'image/png',dataURL:canvas.toDataURL('image/png') as DataURL,created:Date.now()};
     return convertToExcalidrawElements([{id:element.id,type:'image',fileId:id,x:element.x,y:element.y,width:element.width,height:element.height,angle:element.angle,status:'saved'}],{regenerateIds:false});
    });
-   return {elements,files};
+   return renderStyledText(elements,files);
  }
  async function exportImage(format:'png'|'svg'){
   if(!api)return;
@@ -80,7 +83,8 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
    const target=`${filename}.${format}`;
    const destination=await chooseDestination(target,format==='png'?'PNG image':'SVG image',format==='png'?'image/png':'image/svg+xml',`.${format}`);
    const {elements,files}=prepareExport();
-   const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground},files,exportPadding:20};
+   const page=elements.find(element=>element.type==='frame'&&element.customData?.kind==='openboard-page');
+   const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground,...(canvasColor?{viewBackgroundColor:canvasColor}:{})},files,exportPadding:20,exportingFrame:page?.type==='frame'?page:null};
    const blob=format==='png'?await exportToBlob({...opts,mimeType:'image/png'}):new Blob([new XMLSerializer().serializeToString(await exportToSvg(opts))],{type:'image/svg+xml'});
    await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');
   }catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setError('Could not export this whiteboard. Please try again.')}
