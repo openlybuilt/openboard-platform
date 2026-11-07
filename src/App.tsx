@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Boxes, Plus, Trash2, Moon, Sun } from 'lucide-react';
-import { loadBoards, newBoard, reconcileLocalBoards, type Board } from './storage';
+import { boardSnapshots, loadBoards, newBoard, reconcileLocalBoards, type Board } from './storage';
 import { CanvasEditor } from './CanvasEditor';
 import { BoardThumbnail } from './BoardThumbnail';
 import { AuthControls } from './AuthControls';
@@ -18,6 +18,7 @@ export function App({authConfigured=false,cloud,syncUnavailable=false}:{authConf
   const [readFailed,setReadFailed] = useState(() => { if(cloud)return false; try { loadBoards(); return false; } catch { return true; } });
   const [loading,setLoading]=useState(Boolean(cloud));
   const boardsRef=useRef(boards); boardsRef.current=boards;
+  const snapshotsRef=useRef(boardSnapshots(boards));
   const redirectedBoards=useRef(new Map<string,string>());
   const [id,setId] = useState(routeId);
   const [boardToDelete,setBoardToDelete] = useState<Board|null>(null);
@@ -34,8 +35,8 @@ export function App({authConfigured=false,cloud,syncUnavailable=false}:{authConf
    cloud.load().then(next=>{if(!active)return;boardsRef.current=next;setBoards(next);setLoading(false);setSaveStatus('saving');return cloud.flush().then(()=>{if(active)setSaveStatus('saved')})}).catch(()=>{if(active){setLoading(false);setReadFailed(true);setSaveStatus(null);setError('Could not load or sync your account boards. Reload to try again.')}});
    return ()=>{active=false};
   },[cloud]);
-  useEffect(()=>{ const change=()=>setId(routeId()); window.addEventListener('hashchange',change); return ()=>window.removeEventListener('hashchange',change); },[]);
-  const commit=useCallback((next:Board[])=>{if(readFailed||loading)return false;if(saveTimer.current)clearTimeout(saveTimer.current);setSaveStatus('saving');try{let saved=next;let conflictId:string|undefined;if(cloud)cloud.enqueue(boardsRef.current,next);else{const result=reconcileLocalBoards(boardsRef.current,next);saved=result.boards;conflictId=id?result.conflicts.get(id):undefined}boardsRef.current=saved;setBoards(saved);setError('');if(conflictId){redirectedBoards.current.set(id!,conflictId);setConflictNotice('This board changed in another tab. Your changes were saved as a separate conflict copy.');navigate(conflictId)}if(cloud)saveTimer.current=setTimeout(()=>{void cloud.flush().then(()=>setSaveStatus('saved')).catch(()=>{setSaveStatus(null);setError('Could not sync. Your changes are saved in this browser and will retry on your next edit or reload.')})},700);else saveTimer.current=setTimeout(()=>setSaveStatus('saved'),400);return true}catch(error){setSaveStatus(null);setError(error instanceof Error&&error.message.includes('another tab')?error.message:'Could not save your changes. Check that browser storage is available.');return false}},[readFailed,loading,cloud,id]);
+  useEffect(()=>{ const change=()=>{redirectedBoards.current.clear();setId(routeId())}; window.addEventListener('hashchange',change); return ()=>window.removeEventListener('hashchange',change); },[]);
+  const commit=useCallback((next:Board[])=>{if(readFailed||loading)return false;if(saveTimer.current)clearTimeout(saveTimer.current);setSaveStatus('saving');try{let saved=next;let conflictId:string|undefined;if(cloud)cloud.enqueue(boardsRef.current,next);else{const result=reconcileLocalBoards(boardsRef.current,next,snapshotsRef.current);saved=result.boards;conflictId=id?result.conflicts.get(id):undefined;snapshotsRef.current=boardSnapshots(saved)}boardsRef.current=saved;setBoards(saved);setError('');if(conflictId){redirectedBoards.current.set(id!,conflictId);setConflictNotice('This board changed in another tab. Your changes were saved as a separate conflict copy.');navigate(conflictId)}if(cloud)saveTimer.current=setTimeout(()=>{void cloud.flush().then(()=>setSaveStatus('saved')).catch(()=>{setSaveStatus(null);setError('Could not sync. Your changes are saved in this browser and will retry on your next edit or reload.')})},700);else saveTimer.current=setTimeout(()=>setSaveStatus('saved'),400);return true}catch(error){setSaveStatus(null);setError(error instanceof Error&&error.message.includes('another tab')?error.message:'Could not save your changes. Check that browser storage is available.');return false}},[readFailed,loading,cloud,id]);
   const board=boards.find(b=>b.id===id);
   const update=useCallback((next:Board)=>{const target=redirectedBoards.current.get(next.id)??next.id;commit(boardsRef.current.map(b=>b.id===target?{...next,id:target,updatedAt:Date.now()}:b));},[commit]);
   const create=()=>{const next=newBoard();if(commit([next,...boardsRef.current]))navigate(next.id)};
