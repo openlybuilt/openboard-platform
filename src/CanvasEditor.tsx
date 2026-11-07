@@ -348,7 +348,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    setZoom(percent);
  }
  function textAt(x:number,y:number){
-  const tolerance=api?6/api.getAppState().zoom.value:0;
+  const tolerance=api?10/api.getAppState().zoom.value:0;
   return api&&[...api.getSceneElements()].reverse().find(element=>{
    if(element.type!=='text'||element.locked)return false;
    const dx=x-(element.x+element.width/2),dy=y-(element.y+element.height/2);
@@ -382,6 +382,36 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   lastTextClick.current={id:text.id,time:event.timeStamp};
   event.preventDefault();event.stopPropagation();
   api.updateScene({appState:{selectedElementIds:{[text.id]:true}}});
+ }
+ function startEditingText(text:ExcalidrawTextElement,initialCharacter?:string){
+  if(!api)return;
+  api.updateScene({appState:{selectedElementIds:{[text.id]:true}}});
+  setTimeout(()=>{
+   const canvas=canvasRef.current;
+   canvas?.querySelector('.excalidraw')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));
+   if(initialCharacter)setTimeout(()=>{
+    const input=canvas?.querySelector<HTMLTextAreaElement>('textarea.excalidraw-wysiwyg');
+    if(!input)return;
+    input.focus();input.setSelectionRange(input.value.length,input.value.length);
+    input.setRangeText(initialCharacter,input.selectionStart,input.selectionEnd,'end');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+   },0);
+  },0);
+ }
+ function typeIntoSelectedText(event:React.KeyboardEvent<HTMLDivElement>){
+  if(!api||!selectedText||event.nativeEvent.isComposing||event.key.length!==1||event.ctrlKey||event.metaKey||event.altKey)return;
+  if(event.target instanceof Element&&event.target.closest('input,textarea,[contenteditable="true"]'))return;
+  if(!api.getAppState().selectedElementIds[selectedText.id]||api.getAppState().editingTextElement)return;
+  event.preventDefault();event.stopPropagation();startEditingText(selectedText,event.key);
+ }
+ function editTextOnDoubleClick(event:React.MouseEvent<HTMLDivElement>){
+  if(!api||!(event.target instanceof HTMLCanvasElement)||event.button!==0)return;
+  const state=api.getAppState();
+  if(state.activeTool.type!=='selection')return;
+  const text=textAt((event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX,(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY);
+  if(!text||text.type!=='text')return;
+  event.preventDefault();event.stopPropagation();
+  startEditingText(text);
  }
  const selectShapeInterior:NonNullable<ExcalidrawProps['onPointerUp']>=(tool,pointer)=>{
    if(api&&tool.type==='selection'&&pointer.boxSelection.hasOccurred&&!api.getAppState().editingLinearElement){
@@ -418,7 +448,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
  function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
- return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
+ return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onDoubleClickCapture={editTextOnDoubleClick} onKeyDownCapture={typeIntoSelectedText} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
   <input ref={importRef} type="file" accept=".openboard,.excalidraw,application/json" hidden onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void openDiagram(file)}}/>
   <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',currentItemBackgroundColor:'#ffffff01',currentItemFillStyle:'solid',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerDown={bindContainedText} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}/>
   {richText.map(({element,x,y,zoom,editing})=>{const style=textStyle(element);if(!style||editing)return null;return <div key={element.id} className="rich-text-overlay" aria-hidden="true" style={{left:x,top:y,width:element.width*zoom,height:element.height*zoom,fontFamily:fontName(element.fontFamily),fontSize:element.fontSize*zoom,lineHeight:element.lineHeight,color:style.color,fontWeight:style.bold?700:400,fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:element.textAlign as CSSProperties['textAlign'],opacity:element.opacity/100,transform:`rotate(${element.angle}rad)`}}>{element.text}</div>})}
