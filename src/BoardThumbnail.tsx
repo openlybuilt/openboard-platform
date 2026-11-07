@@ -4,6 +4,7 @@ import type { NonDeletedExcalidrawElement } from '@excalidraw/excalidraw/element
 import { legacyElements } from './CanvasEditor';
 import { addCodeThumbnail } from './code-thumbnail';
 import type { Board } from './storage';
+import { renderStyledText } from './text-format';
 
 export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'}) {
  const [src,setSrc]=useState<string|null>(null);
@@ -16,7 +17,8 @@ export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'})
   // Keep code-card geometry in the exported bounds, and draw its saved contents below.
   const exported=elements.map(element=>element.customData?.kind==='arc-code-block'?{...element,type:'rectangle' as const,link:null,strokeColor:'transparent',backgroundColor:'transparent'}:element);
   const [minX,minY]=getCommonBounds(exported);
-  exportToSvg({elements:exported,files:null,appState:{exportBackground:false,exportWithDarkMode:theme==='dark'},exportPadding:16,skipInliningFonts:true}).then((svg:SVGSVGElement)=>{
+  const rendered=renderStyledText(exported,board.scene?.files??{});
+  exportToSvg({elements:rendered.elements,files:rendered.files,appState:{exportBackground:false,exportWithDarkMode:theme==='dark'},exportPadding:16,skipInliningFonts:true}).then((svg:SVGSVGElement)=>{
    if(cancelled)return;
    elements.filter(element=>element.customData?.kind==='arc-code-block').forEach(element=>addCodeThumbnail(svg,element,minX,minY,theme));
    objectUrl=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)],{type:'image/svg+xml'}));
@@ -24,5 +26,5 @@ export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'})
   }).catch(()=>{if(!cancelled)setSrc(null)});
   return ()=>{cancelled=true;if(objectUrl)URL.revokeObjectURL(objectUrl)};
  },[board,theme]);
- return <div className="board-art" data-background={board.background??'plain'} aria-hidden="true">{src&&<img className="board-thumbnail" src={src} alt=""/>}</div>;
+ return <div className="board-art" style={board.canvasColor?{backgroundColor:board.canvasColor}:undefined} data-background={board.background??'plain'} aria-hidden="true">{src&&<img className="board-thumbnail" src={src} alt=""/>}</div>;
 }
