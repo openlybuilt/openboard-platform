@@ -29,11 +29,14 @@ jobs:
           test -n "$VITE_WHITEBOARD_API_URL" || { echo 'Missing VITE_WHITEBOARD_API_URL'; exit 1; }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Prepare isolated Wrangler directory
+        run: mkdir -p "$RUNNER_TEMP/openboard-wrangler"
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ runner.temp }}/openboard-wrangler
           packageManager: npm
           wranglerVersion: 4.158.0
-          command: pages deploy dist --project-name=openboard
+          command: pages deploy ${{ github.workspace }}/dist --project-name=openboard
