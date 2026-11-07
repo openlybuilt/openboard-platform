@@ -28,14 +28,16 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
  },[open]);
  useEffect(()=>{if(panel&&!dialog.current?.open)dialog.current?.showModal()},[panel]);
  const show=(next:NonNullable<typeof panel>)=>{setOpen(false);setError('');setPanel(next)};
- function save(){
-  if(!api)return;
-  try{download(new Blob([serializeAsJSON(api.getSceneElementsIncludingDeleted(),api.getAppState(),api.getFiles(),'local')],{type:'application/json'}),`${filename}.excalidraw`);setOpen(false)}
-  catch{setError('Could not save this whiteboard. Please try again.');setOpen(false)}
- }
- async function exportImage(format:'png'|'svg'){
+ function save(format:'openboard'|'excalidraw'){
   if(!api)return;
   try{
+   const {elements,files}=format==='excalidraw'?prepareExport():{elements:api.getSceneElementsIncludingDeleted(),files:api.getFiles()};
+   download(new Blob([serializeAsJSON(elements,api.getAppState(),files,'local')],{type:'application/json'}),`${filename}.${format}`);setOpen(false)
+  }
+  catch{setError('Could not save this whiteboard. Please try again.');setOpen(false)}
+ }
+ function prepareExport(){
+   if(!api)throw new Error('Editor unavailable');
    const files={...api.getFiles()};
    const elements=api.getSceneElements().flatMap(element=>{
     if(element.customData?.kind!=='arc-code-block')return [element];
@@ -53,8 +55,14 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
     String(element.customData.code||'').split('\n').forEach((line,index)=>context.fillText(line,14,64+index*18));context.restore();
     const id=crypto.randomUUID() as FileId;
     files[id]={id,mimeType:'image/png',dataURL:canvas.toDataURL('image/png') as DataURL,created:Date.now()};
-    return convertToExcalidrawElements([{type:'image',fileId:id,x:element.x,y:element.y,width:element.width,height:element.height,angle:element.angle,status:'saved'}],{regenerateIds:true});
+    return convertToExcalidrawElements([{id:element.id,type:'image',fileId:id,x:element.x,y:element.y,width:element.width,height:element.height,angle:element.angle,status:'saved'}],{regenerateIds:false});
    });
+   return {elements,files};
+ }
+ async function exportImage(format:'png'|'svg'){
+  if(!api)return;
+  try{
+   const {elements,files}=prepareExport();
    if(!elements.length){setError('Add something to the whiteboard before exporting.');return}
    const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground},files,exportPadding:20};
    const blob=format==='png'?await exportToBlob({...opts,mimeType:'image/png'}):new Blob([new XMLSerializer().serializeToString(await exportToSvg(opts))],{type:'image/svg+xml'});
@@ -74,7 +82,8 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
    <button ref={trigger} className="board-menu-trigger" type="button" aria-label="More options" aria-expanded={open} aria-controls="board-menu-panel" onClick={()=>{if(!open)onShow();setOpen(!open)}}><Ellipsis size={20}/></button>
    <div id="board-menu-panel" className={`board-menu-panel ${open?'is-open':'is-closed'}`} inert={!open} aria-hidden={!open}>
     <button type="button" onClick={()=>{if(api?.getSceneElements().length)show('open');else{setOpen(false);onOpen()}}}><FolderOpen size={17}/>Open</button>
-    <button type="button" onClick={save}><FileDown size={17}/>Save to file</button>
+    <button type="button" onClick={()=>save('openboard')}><FileDown size={17}/>Save to file</button>
+    <button type="button" onClick={()=>save('excalidraw')}><FileDown size={17}/>Export as Excalidraw</button>
     <button type="button" onClick={()=>show('export')}><Image size={17}/>Export image</button>
     <button type="button" onClick={()=>show('search')}><Search size={17}/>Find on canvas</button>
     <button type="button" onClick={()=>show('help')}><HelpCircle size={17}/>Help</button>
