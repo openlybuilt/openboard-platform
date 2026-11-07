@@ -3,6 +3,7 @@ import { CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, exportT
 import type { DataURL, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { FileId } from '@excalidraw/excalidraw/element/types';
 import { Ellipsis, FileDown, FolderOpen, Github, HelpCircle, Image, Moon, Search, Sun, Trash2, Twitter, X } from 'lucide-react';
+import { renderStyledText } from './text-format';
 
 function download(blob: Blob, filename: string) {
  const url=URL.createObjectURL(blob);
@@ -10,11 +11,23 @@ function download(blob: Blob, filename: string) {
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:ExcalidrawImperativeAPI|null;name:string;theme:'light'|'dark';onThemeChange:(theme:'light'|'dark')=>void;onOpen:()=>void;onShow:()=>void}) {
+type SavePicker = (options:{suggestedName:string;types:Array<{description:string;accept:Record<string,string[]>}>})=>Promise<FileSystemFileHandle>;
+function chooseDestination(filename:string,description:string,mime:string,extension:string){
+ const picker=(window as Window & {showSaveFilePicker?:SavePicker}).showSaveFilePicker;
+ return picker?picker.call(window,{suggestedName:filename,types:[{description,accept:{[mime]:[extension]}}]}):Promise.resolve(null);
+}
+async function writeFile(handle:FileSystemFileHandle|null,blob:Blob,filename:string){
+ if(!handle){download(blob,filename);return}
+ const writable=await handle.createWritable();
+ try{await writable.write(blob);await writable.close()}catch(error){await writable.abort();throw error}
+}
+
+export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,onOpen,onShow}:{api:ExcalidrawImperativeAPI|null;name:string;theme:'light'|'dark';canvasColor?:string;background:string;onThemeChange:(theme:'light'|'dark')=>void;onOpen:()=>void;onShow:()=>void}) {
  const [open,setOpen]=useState(false);
  const [panel,setPanel]=useState<'search'|'help'|'export'|'reset'|'open'|null>(null);
  const [query,setQuery]=useState('');
  const [error,setError]=useState('');
+ const [notice,setNotice]=useState('');
  const [includeBackground,setIncludeBackground]=useState(true);
  const root=useRef<HTMLDivElement>(null);
  const dialog=useRef<HTMLDialogElement>(null);
@@ -28,14 +41,20 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
  },[open]);
  useEffect(()=>{if(panel&&!dialog.current?.open)dialog.current?.showModal()},[panel]);
  const show=(next:NonNullable<typeof panel>)=>{setOpen(false);setError('');setPanel(next)};
- function save(){
-  if(!api)return;
-  try{download(new Blob([serializeAsJSON(api.getSceneElementsIncludingDeleted(),api.getAppState(),api.getFiles(),'local')],{type:'application/json'}),`${filename}.excalidraw`);setOpen(false)}
-  catch{setError('Could not save this whiteboard. Please try again.');setOpen(false)}
- }
- async function exportImage(format:'png'|'svg'){
+ async function save(format:'openboard'|'excalidraw'){
   if(!api)return;
   try{
+   const target=`${filename}.${format}`;
+   const destination=await chooseDestination(target,format==='openboard'?'OpenBoard file':'Excalidraw file','application/json',`.${format}`);
+   const {elements,files}=format==='excalidraw'?prepareExport():{elements:api.getSceneElementsIncludingDeleted(),files:api.getFiles()};
+   const serialized=serializeAsJSON(elements,api.getAppState(),files,'local');
+   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor}}):serialized;
+   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
+  }
+  catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this whiteboard. Please try again.');setOpen(false)}
+ }
+ function prepareExport(){
+   if(!api)throw new Error('Editor unavailable');
    const files={...api.getFiles()};
    const elements=api.getSceneElements().flatMap(element=>{
     if(element.customData?.kind!=='arc-code-block')return [element];
@@ -53,13 +72,22 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
     String(element.customData.code||'').split('\n').forEach((line,index)=>context.fillText(line,14,64+index*18));context.restore();
     const id=crypto.randomUUID() as FileId;
     files[id]={id,mimeType:'image/png',dataURL:canvas.toDataURL('image/png') as DataURL,created:Date.now()};
-    return convertToExcalidrawElements([{type:'image',fileId:id,x:element.x,y:element.y,width:element.width,height:element.height,angle:element.angle,status:'saved'}],{regenerateIds:true});
+    return convertToExcalidrawElements([{id:element.id,type:'image',fileId:id,x:element.x,y:element.y,width:element.width,height:element.height,angle:element.angle,status:'saved'}],{regenerateIds:false});
    });
-   if(!elements.length){setError('Add something to the whiteboard before exporting.');return}
-   const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground},files,exportPadding:20};
+   return renderStyledText(elements,files);
+ }
+ async function exportImage(format:'png'|'svg'){
+  if(!api)return;
+  try{
+   if(!api.getSceneElements().length){setError('Add something to the whiteboard before exporting.');return}
+   const target=`${filename}.${format}`;
+   const destination=await chooseDestination(target,format==='png'?'PNG image':'SVG image',format==='png'?'image/png':'image/svg+xml',`.${format}`);
+   const {elements,files}=prepareExport();
+   const page=elements.find(element=>element.type==='frame'&&element.customData?.kind==='openboard-page');
+   const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground,...(canvasColor?{viewBackgroundColor:canvasColor}:{})},files,exportPadding:20,exportingFrame:page?.type==='frame'?page:null};
    const blob=format==='png'?await exportToBlob({...opts,mimeType:'image/png'}):new Blob([new XMLSerializer().serializeToString(await exportToSvg(opts))],{type:'image/svg+xml'});
-   download(blob,`${filename}.${format}`);dialog.current?.close();
-  }catch{setError('Could not export this whiteboard. Please try again.')}
+   await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');
+  }catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setError('Could not export this whiteboard. Please try again.')}
  }
  function find(){
   if(!api||!query.trim())return;
@@ -74,7 +102,8 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
    <button ref={trigger} className="board-menu-trigger" type="button" aria-label="More options" aria-expanded={open} aria-controls="board-menu-panel" onClick={()=>{if(!open)onShow();setOpen(!open)}}><Ellipsis size={20}/></button>
    <div id="board-menu-panel" className={`board-menu-panel ${open?'is-open':'is-closed'}`} inert={!open} aria-hidden={!open}>
     <button type="button" onClick={()=>{if(api?.getSceneElements().length)show('open');else{setOpen(false);onOpen()}}}><FolderOpen size={17}/>Open</button>
-    <button type="button" onClick={save}><FileDown size={17}/>Save to file</button>
+    <button type="button" onClick={()=>void save('openboard')}><FileDown size={17}/>Save to file</button>
+    <button type="button" onClick={()=>void save('excalidraw')}><FileDown size={17}/>Export as Excalidraw</button>
     <button type="button" onClick={()=>show('export')}><Image size={17}/>Export image</button>
     <button type="button" onClick={()=>show('search')}><Search size={17}/>Find on canvas</button>
     <button type="button" onClick={()=>show('help')}><HelpCircle size={17}/>Help</button>
@@ -87,6 +116,7 @@ export function BoardMenu({api,name,theme,onThemeChange,onOpen,onShow}:{api:Exca
    </div>
   </div>
   {error&&!panel&&<div className="board-menu-error" role="alert">{error}<button type="button" aria-label="Dismiss" onClick={()=>setError('')}><X size={15}/></button></div>}
+  {notice&&!panel&&<div className="board-menu-error" role="status">{notice}<button type="button" aria-label="Dismiss" onClick={()=>setNotice('')}><X size={15}/></button></div>}
   <dialog ref={dialog} className="board-menu-dialog" aria-labelledby="board-menu-dialog-title" onClose={()=>{setPanel(null);setError('');trigger.current?.focus()}} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
    <div className="board-menu-dialog-head"><h2 id="board-menu-dialog-title">{panel==='search'?'Find on canvas':panel==='help'?'Help':panel==='export'?'Export image':panel==='open'?'Open a file?':'Reset canvas?'}</h2><button type="button" aria-label="Close" onClick={()=>dialog.current?.close()}><X size={18}/></button></div>
    {panel==='search'&&<form onSubmit={event=>{event.preventDefault();find()}}><label htmlFor="board-search">Search for text</label><input id="board-search" autoFocus value={query} onChange={event=>{setQuery(event.target.value);setError('')}} placeholder="Find text on this board"/><div className="board-menu-dialog-actions"><button type="submit" className="board-menu-primary">Find</button></div></form>}
