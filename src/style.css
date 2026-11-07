@@ -357,3 +357,51 @@ button:not(:disabled):active{transform:scale(.97)}
 .excalidraw.theme--dark .context-menu-item-separator{border-color:#505050}
 .excalidraw-wrap .App-menu_top__left > div:has(> .main-menu-trigger){position:fixed!important;top:96px;right:20px;left:auto;z-index:20}
 @media(max-width:650px){.excalidraw-wrap .App-menu_top__left > div:has(> .main-menu-trigger){right:10px}}
+
+/* OpenBoard's own menu and dialogs share the floating controls' surfaces. */
+.excalidraw-wrap .excalidraw .main-menu-trigger{display:none!important}
+.board-menu{position:absolute;right:20px;top:16px;z-index:25;font:500 14px 'Inter Variable',Inter,system-ui,sans-serif;color:#171717}
+.board-menu-trigger{display:grid;place-items:center;width:46px;height:46px;padding:0;border:1px solid #d8d8d8;border-radius:1.125rem;background:#fff;color:inherit;box-shadow:0 6px 18px #00000010;cursor:pointer}
+.board-menu-trigger:hover{background:#f2f2f2}
+.board-menu-panel{position:absolute;top:0;right:calc(100% + 8px);width:min(250px,calc(100vw - 80px));max-height:calc(100vh - 120px);overflow:auto;padding:8px;background:#fff;border:1px solid #d8d8d8;border-radius:1.125rem;box-shadow:0 6px 18px #00000010;transform-origin:right top;transition:opacity 200ms ease,transform 200ms ease,visibility 200ms}
+.board-menu-panel.is-closed{opacity:0;transform:scaleX(.88);visibility:hidden;pointer-events:none}.board-menu-panel.is-open{opacity:1;transform:scaleX(1);visibility:visible}
+.board-menu-panel button,.board-menu-panel a{display:flex;align-items:center;gap:12px;width:100%;border:0;border-radius:.7rem;background:transparent;color:inherit;padding:9px 10px;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.board-menu-panel button:hover,.board-menu-panel a:hover{background:#f2f2f2}.board-menu-panel button:focus-visible,.board-menu-panel a:focus-visible,.board-menu-trigger:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.board-menu-divider{height:1px;background:#e5e5e5;margin:6px}.board-menu-label{display:block;padding:7px 10px 3px;color:#777;font-size:12px}
+.board-menu-dialog{width:min(420px,calc(100vw - 32px));border:1px solid #dedede;border-radius:1.125rem;padding:22px;background:#fff;color:#171717;box-shadow:0 14px 48px #0003;font:14px/1.5 'Inter Variable',Inter,system-ui,sans-serif}
+.board-menu-dialog::backdrop{background:#0006}.board-menu-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.board-menu-dialog h2{font-size:19px;letter-spacing:-.02em;margin:0}.board-menu-dialog-head button,.board-menu-error button{display:grid;place-items:center;border:0;background:transparent;color:inherit;cursor:pointer;padding:6px}.board-menu-dialog p{color:#666}.board-menu-dialog form{display:grid;gap:10px;margin-top:18px}.board-menu-dialog form label{font-size:13px}.board-menu-dialog form input{width:100%;padding:10px;border:1px solid #ccc;border-radius:.7rem;background:transparent;color:inherit;font:inherit}.board-menu-check{display:flex;align-items:center;gap:8px}.board-menu-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.board-menu-dialog-actions button{border:1px solid #ccc;border-radius:.75rem;background:transparent;color:inherit;padding:8px 14px;font:inherit;cursor:pointer}.board-menu-dialog-actions .board-menu-primary{background:#202020;border-color:#202020;color:#fff}.board-menu-dialog-error{color:#b42318!important}.board-menu-error{position:absolute;top:75px;right:20px;z-index:25;background:#fff;border:1px solid #ddd;border-radius:.75rem;padding:10px;display:flex;align-items:center;gap:8px}
+.app[data-theme="dark"] .board-menu{color:#f3f3f3}.app[data-theme="dark"] .board-menu-trigger,.app[data-theme="dark"] .board-menu-panel,.app[data-theme="dark"] .board-menu-dialog,.app[data-theme="dark"] .board-menu-error{background:#303030;color:#f3f3f3;border-color:#505050}.app[data-theme="dark"] .board-menu-trigger:hover,.app[data-theme="dark"] .board-menu-panel button:hover,.app[data-theme="dark"] .board-menu-panel a:hover{background:#505050}.app[data-theme="dark"] .board-menu-divider{background:#505050}.app[data-theme="dark"] .board-menu-label,.app[data-theme="dark"] .board-menu-dialog p{color:#bbb}.app[data-theme="dark"] .board-menu-dialog-actions .board-menu-primary{background:#eee;color:#202020;border-color:#eee}
+@media(max-width:650px){.board-menu{right:10px}}
+@media(prefers-reduced-motion:reduce){.board-menu-panel{transition:none}}
+
+.custom-colors{position:absolute;z-index:16;top:18px;left:398px;display:grid;gap:10px;padding:12px;background:#fff;border:1px solid #d8d8d8;border-radius:1rem;box-shadow:0 6px 18px #00000010;font:500 13px 'Inter Variable',Inter,sans-serif}
+.custom-colors label{display:flex;align-items:center;justify-content:space-between;gap:16px}.custom-colors input[type=color]{width:34px;height:28px;padding:0;border:1px solid #ccc;border-radius:6px;background:transparent;cursor:pointer}
+.background-option-heading{padding:8px 10px 3px;color:#777;font-size:12px;border-top:1px solid #e5e5e5;margin-top:5px}
+.app[data-theme="dark"] .custom-colors{background:#303030;color:#f3f3f3;border-color:#505050}.app[data-theme="dark"] .background-option-heading{border-color:#505050;color:#bbb}
+@media(max-width:650px){.custom-colors{left:260px;max-width:calc(100% - 270px)}}
+.rich-text-overlay{position:absolute;z-index:3;pointer-events:none;white-space:pre;transform-origin:center center}
+.app[data-theme="dark"] .rich-text-overlay{filter:invert(93%) hue-rotate(180deg)}
+.excalidraw-wrap[data-rich-editing="true"] .excalidraw-wysiwyg{color:var(--rich-edit-color)!important;font-weight:var(--rich-edit-weight)!important;font-style:var(--rich-edit-style)!important;text-decoration:var(--rich-edit-decoration)!important;width:var(--rich-edit-width)!important;margin-left:var(--rich-edit-offset)!important}
+.text-style-controls{display:flex;gap:5px}.text-style-controls button{width:30px;height:28px;border:1px solid #ddd;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.text-style-controls button[aria-pressed="true"]{background:#e8e8e8}.custom-colors input[type=number]{width:54px;border:1px solid #ccc;border-radius:6px;padding:4px;background:transparent;color:inherit}.app[data-theme="dark"] .text-style-controls button{border-color:#666}.app[data-theme="dark"] .text-style-controls button[aria-pressed="true"]{background:#555}
+.canvas-wrap[data-background="dots"],.canvas-wrap[data-background="grid"],.app[data-theme="dark"] .canvas-wrap[data-background="dots"],.app[data-theme="dark"] .canvas-wrap[data-background="grid"]{background-color:var(--canvas-color,#fff)}
+.app[data-theme="dark"] .canvas-wrap[data-background="dots"],.app[data-theme="dark"] .canvas-wrap[data-background="grid"]{background-color:var(--canvas-color,#1e1e1e)}
+.canvas-color-picker{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;font-size:13px}
+.canvas-color-picker input{width:30px;height:26px;padding:0;border:1px solid #ddd;border-radius:6px;background:transparent;cursor:pointer}
+.background-options{top:auto;bottom:0;max-height:min(70vh,480px);overflow-y:auto;overscroll-behavior:contain}
+/* OpenBoard's picker replaces the editor's preset palettes. */
+.excalidraw-wrap .selected-shape-actions h3:has(+ div > .color-picker-container),.excalidraw-wrap .selected-shape-actions div:has(> .color-picker-container){display:none}
+.openboard-color-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:30px}
+.background-options .openboard-color-row{padding:8px 10px;font-size:13px}
+.openboard-color-trigger{display:flex;align-items:center;gap:5px;padding:3px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333}
+.openboard-color-trigger:hover{border-color:#999}.openboard-color-swatch{display:block;width:22px;height:22px;border:1px solid #bcbcbc;border-radius:4px}
+.openboard-color-popup{position:fixed;z-index:1000;width:248px;padding:12px;border:1px solid #d8d8d8;border-radius:15px;background:#fff;color:#222;box-shadow:0 12px 40px #0003;font:500 13px 'Inter Variable',Inter,sans-serif}
+.color-spectrum{position:relative;width:100%;height:150px;border-radius:8px;touch-action:none;cursor:crosshair;background-image:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent)}
+.color-spectrum-cursor{position:absolute;width:14px;height:14px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #0008;transform:translate(-50%,-50%);pointer-events:none}
+.color-hue-label,.color-hex-label{display:flex;align-items:center;gap:10px;margin-top:12px}.color-hue-label span,.color-hex-label span{width:30px}
+.color-hue-label input{flex:1;appearance:none;height:12px;border-radius:8px;background:linear-gradient(to right,red,#ff0,#0f0,#0ff,#00f,#f0f,red);cursor:pointer}
+.color-hue-label input::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #0008;background:transparent}
+.color-hex-label input{width:100%;padding:7px 9px;border:1px solid #d8d8d8;border-radius:7px;background:transparent;color:inherit;font:inherit;text-transform:uppercase}
+.color-transparent{margin-top:10px;border:1px solid #ddd;border-radius:7px;padding:5px 8px;background:transparent;color:inherit;cursor:pointer}
+:root:has(.app[data-theme="dark"]) .openboard-color-popup,:root:has(.app[data-theme="dark"]) .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
+.background-options .openboard-color-trigger{width:auto;min-height:0;padding:3px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333}
+.app[data-theme="dark"] .background-options .openboard-color-trigger{background:#303030;color:#f3f3f3;border-color:#555}
