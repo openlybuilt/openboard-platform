@@ -55,6 +55,11 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  const dockRef=useRef<HTMLDivElement>(null);
  const drag=useRef<{x:number;y:number;left:number;top:number;moved:boolean}|null>(null);
  const boardRef=useRef(board); boardRef.current=board;
+ const clearSelection=()=>{
+  if(!api)return;
+  api.updateScene({appState:{selectedElementIds:{},selectedGroupIds:{},editingGroupId:null,selectedLinearElement:null}});
+  setShowProperties(false);
+ };
  useEffect(()=>{
   const closeOutside=(event:PointerEvent)=>{if(event.target instanceof Node&&!dockRef.current?.contains(event.target)){setOpen(false);setFlowchartsOpen(false);setBackgroundOpen(false)}};
   document.addEventListener('pointerdown',closeOutside);
@@ -71,7 +76,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   const removeClosing=()=>{closing?.remove();closing=null;if(timer)clearTimeout(timer)};
   const observer=new MutationObserver(records=>{
    for(const record of records){
-    for(const node of record.addedNodes){if(node instanceof HTMLElement&&node.matches('.dropdown-menu'))removeClosing()}
+    for(const node of record.addedNodes){if(node instanceof HTMLElement&&node.matches('.dropdown-menu')){removeClosing();clearSelection()}}
     for(const node of record.removedNodes){
      if(!(node instanceof HTMLElement)||!node.matches('.dropdown-menu')||window.matchMedia('(prefers-reduced-motion: reduce)').matches)continue;
      removeClosing();
@@ -279,7 +284,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  };
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
- function end(){if(drag.current&&!drag.current.moved){if(!open){setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
+ function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
  return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey}} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
   <Excalidraw theme={theme} initialData={{elements:initial,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}>
     <MainMenu>
@@ -312,9 +317,9 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
   </div>}
   <div className="zoom-slider"><WakeSlider value={zoom} onChange={setCanvasZoom}/></div>
   <div className="tool-dock" ref={dockRef} style={position?{left:position.x,top:position.y,transform:'none'}:undefined}>
-   <button className="tool-toggle" type="button" aria-expanded={open} aria-controls="drawing-tools" aria-label={open?'Close tools':'Open tools'} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>{drag.current=null}} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(!open){setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(v=>!v)}}}><Menu size={20}/></button>
-   <button className="flowchart-toggle" type="button" aria-label="Flowcharts" title="Flowcharts" aria-expanded={flowchartsOpen} aria-controls="flowchart-options" onClick={()=>{if(!flowchartsOpen){setOpen(false);setBackgroundOpen(false)}setFlowchartsOpen(value=>!value)}}><Workflow size={19}/></button>
-   <button className="background-toggle" type="button" aria-label="Canvas background" title="Canvas background" aria-expanded={backgroundOpen} aria-controls="background-options" onClick={()=>{if(!backgroundOpen){setOpen(false);setFlowchartsOpen(false)}setBackgroundOpen(value=>!value)}}><Grid2X2 size={19}/></button>
+   <button className="tool-toggle" type="button" aria-expanded={open} aria-controls="drawing-tools" aria-label={open?'Close tools':'Open tools'} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>{drag.current=null}} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(v=>!v)}}}><Menu size={20}/></button>
+   <button className="flowchart-toggle" type="button" aria-label="Flowcharts" title="Flowcharts" aria-expanded={flowchartsOpen} aria-controls="flowchart-options" onClick={()=>{if(!flowchartsOpen){clearSelection();setOpen(false);setBackgroundOpen(false)}setFlowchartsOpen(value=>!value)}}><Workflow size={19}/></button>
+   <button className="background-toggle" type="button" aria-label="Canvas background" title="Canvas background" aria-expanded={backgroundOpen} aria-controls="background-options" onClick={()=>{if(!backgroundOpen){clearSelection();setOpen(false);setFlowchartsOpen(false)}setBackgroundOpen(value=>!value)}}><Grid2X2 size={19}/></button>
    <div className={`tool-panel ${open?'is-open':'is-closed'}`} inert={!open}>
     <div id="drawing-tools" className="tools" aria-label="Drawing tools">{choices.map(({type,label,Icon})=><button key={type} onClick={()=>{setShowProperties(false);if(api)api.updateScene({appState:{...api.getAppState(),...preferences.current}});api?.setActiveTool({type,locked:type!=='selection'&&type!=='hand'})}} aria-pressed={activeTool===type} aria-label={label} title={label}><Icon size={18}/><span className="tool-label">{label}</span></button>)}<button onClick={insertCodeBlock} aria-label="Add code block" title="Add code block"><Code2 size={18}/><span className="tool-label">Code block</span></button></div>
    </div>
