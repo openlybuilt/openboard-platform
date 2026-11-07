@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { Excalidraw, MainMenu, convertToExcalidrawElements, getSceneVersion, getCommonBounds, FONT_FAMILY, newElementWith, CaptureUpdateAction } from '@excalidraw/excalidraw';
+import { Excalidraw, MainMenu, convertToExcalidrawElements, getSceneVersion, getCommonBounds, FONT_FAMILY, newElementWith, CaptureUpdateAction, loadFromBlob } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI, ExcalidrawProps } from '@excalidraw/excalidraw/types';
 import { BoardCodeBlock } from './BoardCodeBlock';
 import { WakeSlider } from './vendor/bencho/wake-slider';
@@ -52,6 +52,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  const preferences=useRef(board.scene?.preferences ?? {});
  const [position,setPosition]=useState<{x:number;y:number}|null>(null);
  const canvasRef=useRef<HTMLDivElement>(null);
+ const importRef=useRef<HTMLInputElement>(null);
  const dockRef=useRef<HTMLDivElement>(null);
  const drag=useRef<{x:number;y:number;left:number;top:number;moved:boolean}|null>(null);
  const boardRef=useRef(board); boardRef.current=board;
@@ -109,7 +110,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    update({...boardRef.current,scene:{...boardRef.current.scene,elements:initial}});
   }
  },[initial,update]);
- const onChange:NonNullable<ExcalidrawProps['onChange']>=useCallback((elements,state)=>{
+ const onChange:NonNullable<ExcalidrawProps['onChange']>=useCallback((elements,state,files)=>{
    setActiveTool(state.activeTool.type);
    const blocks=elements.filter(element=>!element.isDeleted&&element.customData?.kind==='arc-code-block').map(element=>({id:element.id,x:(element.x+state.scrollX)*state.zoom.value,y:(element.y+state.scrollY)*state.zoom.value,width:element.width,height:element.height,angle:element.angle,zoom:state.zoom.value,data:element.customData??{}}));
    setCodeBlocks(previous=>JSON.stringify(previous)===JSON.stringify(blocks)?previous:blocks);
@@ -143,8 +144,18 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
    }
    if(next===version.current&&!changedPreferences)return;
    version.current=next;
-   update({...boardRef.current,scene:{elements:[...elements],preferences:preferences.current}});
+   update({...boardRef.current,scene:{elements:[...elements],preferences:preferences.current,files}});
  },[update,api,background]);
+ async function openDiagram(file:File){
+  if(!api)return;
+  try{
+   const data=await loadFromBlob(file,api.getAppState(),null);
+   if(api.getSceneElements().length&&!window.confirm('Replace the current whiteboard with the selected file?'))return;
+   api.addFiles(Object.values(data.files));
+   api.updateScene({elements:data.elements,captureUpdate:CaptureUpdateAction.IMMEDIATELY});
+   api.scrollToContent(data.elements,{fitToContent:true});
+  }catch{window.alert('Could not open this file. Choose a valid .excalidraw file.')}
+ }
  function chooseBackground(value:CanvasBackground){setBackground(value);update({...boardRef.current,background:value});setBackgroundOpen(false)}
  function insertCodeBlock(){
    if(!api)return;
@@ -286,9 +297,10 @@ export function CanvasEditor({board,update,saveStatus,onBack,theme,onThemeChange
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
  function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
  return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey}} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
-  <Excalidraw theme={theme} initialData={{elements:initial,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}>
+  <input ref={importRef} type="file" accept=".excalidraw,application/json" hidden onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void openDiagram(file)}}/>
+  <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}>
     <MainMenu>
-      <MainMenu.DefaultItems.LoadScene/>
+      <MainMenu.Item onSelect={()=>importRef.current?.click()}>Open</MainMenu.Item>
       <MainMenu.DefaultItems.SaveToActiveFile/>
       <MainMenu.DefaultItems.Export/>
       <MainMenu.DefaultItems.SaveAsImage/>

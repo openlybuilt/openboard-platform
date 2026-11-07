@@ -1,8 +1,8 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { AppState } from '@excalidraw/excalidraw/types';
+import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 export type CanvasBackground = 'plain' | 'dots' | 'grid';
-export type Board = { id: string; name: string; updatedAt: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState> } };
+export type Board = { id: string; name: string; updatedAt: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState>; files?: BinaryFiles } };
 const KEY = 'whiteboard.boards.v1';
 export function loadBoards(): Board[] {
   const raw = localStorage.getItem(KEY);
