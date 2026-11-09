@@ -7,8 +7,8 @@ import { renderStyledText } from './text-format';
 
 function download(blob: Blob, filename: string) {
  const url=URL.createObjectURL(blob);
- const link=document.createElement('a');link.href=url;link.download=filename;link.click();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();
+ setTimeout(()=>{link.remove();URL.revokeObjectURL(url)},1000);
 }
 
 type SavePicker = (options:{suggestedName:string;types:Array<{description:string;accept:Record<string,string[]>}>})=>Promise<FileSystemFileHandle>;
@@ -50,7 +50,7 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
    const state=api.getAppState();
    const serialized=serializeAsJSON(elements,state,files,'local');
    const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor:canvasColor??state.viewBackgroundColor,viewport:{zoom:state.zoom.value,scrollX:state.scrollX,scrollY:state.scrollY}}}):serialized;
-   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
+   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Download requested. Check your browser’s downloads for the file.');setOpen(false)
   }
   catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this whiteboard. Please try again.');setOpen(false)}
  }
@@ -87,7 +87,7 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
    const page=elements.find(element=>element.type==='frame'&&element.customData?.kind==='openboard-page');
    const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground,...(canvasColor?{viewBackgroundColor:canvasColor}:{})},files,exportPadding:20,exportingFrame:page?.type==='frame'?page:null};
    const blob=format==='png'?await exportToBlob({...opts,mimeType:'image/png'}):new Blob([new XMLSerializer().serializeToString(await exportToSvg(opts))],{type:'image/svg+xml'});
-   await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');
+   await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Download requested. Check your browser’s downloads for the file.');
   }catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setError('Could not export this whiteboard. Please try again.')}
  }
  function find(){
