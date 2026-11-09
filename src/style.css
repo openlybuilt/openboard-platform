@@ -409,6 +409,13 @@ button:not(:disabled):active{transform:scale(.97)}
 
 .save-sign-in{appearance:none;background:none;border:0;color:inherit;font:inherit;padding:0;cursor:pointer}
 .save-sign-in span{text-decoration:underline;text-underline-offset:3px}
+
+/* Adapt the thumbnail's canvas together with Excalidraw's dark SVG export. */
+.board-art-surface{position:absolute;inset:0;background:#fff}
+.board-art[data-background="dots"] .board-art-surface{background-image:radial-gradient(#c4c4c4 1px,transparent 1.2px);background-size:12px 12px}
+.board-art[data-background="grid"] .board-art-surface{background-image:linear-gradient(#dedede 1px,transparent 1px),linear-gradient(90deg,#dedede 1px,transparent 1px);background-size:12px 12px}
+.app[data-theme="dark"] .board-art-surface{filter:invert(93%) hue-rotate(180deg)}
+.board-thumbnail{position:relative;z-index:1}
 .save-sign-in:hover{opacity:.7}
 .save-sign-in:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:2px}
 

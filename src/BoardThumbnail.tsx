@@ -5,6 +5,7 @@ import { legacyElements } from './CanvasEditor';
 import { addCodeThumbnail } from './code-thumbnail';
 import type { Board } from './storage';
 import { renderStyledText } from './text-format';
+import { ensureFrameFills } from './frame-fills';
 
 export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'}) {
  const [src,setSrc]=useState<string|null>(null);
@@ -12,7 +13,7 @@ export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'})
   let cancelled=false;
   let objectUrl:string|null=null;
   setSrc(null);
-  const elements=(board.scene?.elements ?? legacyElements(board)).filter((element):element is NonDeletedExcalidrawElement=>!element.isDeleted);
+  const elements=ensureFrameFills(board.scene?.elements ?? legacyElements(board)).filter((element):element is NonDeletedExcalidrawElement=>!element.isDeleted);
   if(!elements.length)return;
   // Keep code-card geometry in the exported bounds, and draw its saved contents below.
   const exported=elements.map(element=>element.customData?.kind==='arc-code-block'?{...element,type:'rectangle' as const,link:null,strokeColor:'transparent',backgroundColor:'transparent'}:element);
@@ -26,5 +27,5 @@ export function BoardThumbnail({board,theme}:{board:Board;theme:'light'|'dark'})
   }).catch(()=>{if(!cancelled)setSrc(null)});
   return ()=>{cancelled=true;if(objectUrl)URL.revokeObjectURL(objectUrl)};
  },[board,theme]);
- return <div className="board-art" style={board.canvasColor?{backgroundColor:board.canvasColor}:undefined} data-background={board.background??'plain'} aria-hidden="true">{src&&<img className="board-thumbnail" src={src} alt=""/>}</div>;
+ return <div className="board-art" data-background={board.background??'plain'} aria-hidden="true"><div className="board-art-surface" style={{backgroundColor:board.canvasColor??'#ffffff'}}/>{src&&<img className="board-thumbnail" src={src} alt=""/>}</div>;
 }
