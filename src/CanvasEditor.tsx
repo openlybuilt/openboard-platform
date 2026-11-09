@@ -13,6 +13,7 @@ import { ArrowLeft, Menu, MousePointer2, Hand, Square, Diamond, Circle, ArrowUpR
 import { BoardMenu } from './BoardMenu';
 import { readBoardFile } from './board-file';
 import type { Board, CanvasBackground } from './storage';
+import { ensureFrameFills, fitFrameFills } from './frame-fills';
 import '@excalidraw/excalidraw/index.css';
 
 const choices = [
@@ -88,18 +89,20 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  // Excalidraw inverts the canvas in dark mode, including its background.
  useEffect(()=>{if(api)api.updateScene({appState:{viewBackgroundColor:background==='plain'?(board.canvasColor??(theme==='dark'?'#f0f0f0':'#ffffff')):'transparent'}})},[api,theme,background,board.canvasColor]);
  // A nearly transparent fill makes the entire card draggable without painting behind its rounded corners.
- const initial=useMemo(()=>(board.scene?.elements ?? legacyElements(board)).map(element=>{
+ const initial=useMemo(()=>ensureFrameFills((board.scene?.elements ?? legacyElements(board)).map(element=>{
   if(element.customData?.kind==='arc-code-block')return {...element,type:'rectangle' as const,link:null,strokeColor:'transparent',backgroundColor:'#ffffff01',fillStyle:'solid' as const};
   if(['rectangle','ellipse','diamond'].includes(element.type)&&element.backgroundColor==='transparent')return {...element,backgroundColor:'#ffffff01',fillStyle:'solid' as const};
   return element;
- }),[board.id]);
+ })),[board.id]);
  const version=useRef(getSceneVersion(initial));
  useEffect(()=>{
-  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid')||['rectangle','ellipse','diamond'].includes(element.type)&&element.backgroundColor==='transparent')){
+  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid')||['rectangle','ellipse','diamond'].includes(element.type)&&element.backgroundColor==='transparent') || (boardRef.current.scene?.elements.length??0)!==initial.length){
    update({...boardRef.current,scene:{...boardRef.current.scene,elements:initial}});
   }
  },[initial,update]);
  const onChange:NonNullable<ExcalidrawProps['onChange']>=useCallback((elements,state,files)=>{
+   const fitted=fitFrameFills(elements);
+   if(fitted&&api){queueMicrotask(()=>api.updateScene({elements:fitted,captureUpdate:CaptureUpdateAction.IMMEDIATELY}));return}
    if(api&&elements.some(element=>element.type==='text'&&textStyle(element)&&element.strokeColor!=='transparent'))queueMicrotask(()=>{
     const current=api.getSceneElementsIncludingDeleted();
     if(!current.some(element=>element.type==='text'&&textStyle(element)&&element.strokeColor!=='transparent'))return;
