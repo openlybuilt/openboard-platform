@@ -15,7 +15,11 @@ export function ensureFrameFills(elements: readonly ExcalidrawElement[]): Excali
   const ids = new Set(elements.map(element => element.id));
   const result: ExcalidrawElement[] = [];
   for (const element of elements) {
-    result.push(element);
+    // Older saved fills inherited the frame stroke. Keep their fill but let
+    // the frame alone draw the outline.
+    result.push(isFill(element) && element.strokeColor !== 'transparent'
+      ? newElementWith(element, { strokeColor: 'transparent' })
+      : element);
     if (element.type !== 'frame' || element.isDeleted || element.backgroundColor === 'transparent' || filled.has(element.id)) continue;
     let id = `openboard-frame-fill-${element.id}`;
     if (ids.has(id)) id = crypto.randomUUID();
@@ -26,6 +30,7 @@ export function ensureFrameFills(elements: readonly ExcalidrawElement[]): Excali
       id,
       index: null,
       type: 'rectangle',
+      strokeColor: 'transparent',
       frameId: element.id,
       boundElements: null,
       link: null,
@@ -51,9 +56,9 @@ export function fitFrameFills(elements: readonly ExcalidrawElement[]): Excalidra
       changed = true;
       return newElementWith(element, { isDeleted: true });
     }
-    if (element.x === frame.x && element.y === frame.y && element.width === frame.width && element.height === frame.height && element.angle === frame.angle) return element;
+    if (element.x === frame.x && element.y === frame.y && element.width === frame.width && element.height === frame.height && element.angle === frame.angle && element.strokeColor === 'transparent') return element;
     changed = true;
-    return newElementWith(element, { x: frame.x, y: frame.y, width: frame.width, height: frame.height, angle: frame.angle });
+    return newElementWith(element, { x: frame.x, y: frame.y, width: frame.width, height: frame.height, angle: frame.angle, strokeColor: 'transparent' });
   });
   return changed ? fitted : null;
 }
