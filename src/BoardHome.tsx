@@ -45,8 +45,8 @@ export function BoardHome({ boards, authConfigured, guestUnsaved, theme, onTheme
       <span>{view === 'boards' ? `${active.length} ${active.length === 1 ? 'board' : 'boards'}${guestUnsaved ? ' · Not saved' : ''}` : `${deleted.length} recently deleted · Removed after 30 days`}</span>
       {view === 'boards' && <div className="board-list-controls">
         <ExpandingSearch className="board-search" label="Search boards" placeholder="Search boards" items={active.map(board => ({ id: board.id, title: board.name, meta: `Edited ${formatDate(board.updatedAt)}` }))} onSelect={item => onOpen(item.id)} maxResults={active.length} emptyHint="Try a different board name."/>
-        <button className="secondary board-open-file" type="button" onClick={() => fileInput.current?.click()}><FolderOpen size={17}/> Open file</button>
-        {active.length > 0 && <button className="primary" type="button" onClick={onCreate}><Plus size={17}/> New whiteboard</button>}
+        <button className="primary" type="button" onClick={onCreate}><Plus size={17}/> New board</button>
+        <button className="secondary board-open-file" type="button" aria-label="Open file" title="Open file" onClick={() => fileInput.current?.click()}><FolderOpen size={18}/></button>
       </div>}
     </div></div>
     {shown.length ? <div className="board-grid">{[...shown].sort((a, b) => (view === 'deleted' ? (b.deletedAt ?? 0) - (a.deletedAt ?? 0) : b.updatedAt - a.updatedAt)).map(board =>
@@ -54,6 +54,6 @@ export function BoardHome({ boards, authConfigured, guestUnsaved, theme, onTheme
         {view === 'boards' ? <button className="board-open" type="button" onClick={() => onOpen(board.id)} aria-label={`Open ${board.name}`}><BoardThumbnail board={board} theme={theme}/><div className="card-title">{board.name}</div><small>Edited {formatDate(board.updatedAt)}</small></button> : <><BoardThumbnail board={board} theme={theme}/><div className="card-title">{board.name}</div><small className="deleted-date">Deleted {formatDate(board.deletedAt!)} · {Math.max(1, Math.ceil((board.deletedAt! + TRASH_RETENTION_MS - Date.now()) / 86_400_000))} days left</small><div className="trash-card-actions"><button type="button" onClick={() => onRestore(board)}><RotateCcw size={15}/> Restore</button><button type="button" onClick={() => onDelete(board)}><Trash2 size={15}/> Delete permanently</button></div></>}
         {view === 'boards' && <button className="delete" type="button" aria-label={`Delete ${board.name}`} onClick={() => onDelete(board)}><Trash2 size={16}/></button>}
       </article>
-    )}</div> : <div className="empty"><div className="empty-icon">{view === 'boards' ? <Boxes size={25}/> : <Trash2 size={23}/>}</div><h3>{view === 'boards' ? 'Your first idea starts here.' : 'Nothing recently deleted.'}</h3><p>{view === 'boards' ? 'Create a whiteboard to map out an architecture, a system, or anything on your mind.' : 'Deleted whiteboards stay here for 30 days before they are removed.'}</p>{view === 'boards' && <button className="secondary" type="button" onClick={onCreate}><Plus size={16}/> Create a whiteboard</button>}</div>}
+    )}</div> : <div className="empty"><div className="empty-icon">{view === 'boards' ? <Boxes size={25}/> : <Trash2 size={23}/>}</div><h3>{view === 'boards' ? 'Your first idea starts here.' : 'Nothing recently deleted.'}</h3><p>{view === 'boards' ? 'Create a board to map out an architecture, a system, or anything on your mind.' : 'Deleted boards stay here for 30 days before they are removed.'}</p>{view === 'boards' && <button className="secondary" type="button" onClick={onCreate}><Plus size={16}/> Create a board</button>}</div>}
   </main>;
 }
