@@ -47,8 +47,9 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
    const target=`${filename}.${format}`;
    const destination=await chooseDestination(target,format==='openboard'?'OpenBoard file':'Excalidraw file','application/json',`.${format}`);
    const {elements,files}=format==='excalidraw'?prepareExport():{elements:api.getSceneElementsIncludingDeleted(),files:api.getFiles()};
-   const serialized=serializeAsJSON(elements,api.getAppState(),files,'local');
-   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor}}):serialized;
+   const state=api.getAppState();
+   const serialized=serializeAsJSON(elements,state,files,'local');
+   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor:canvasColor??state.viewBackgroundColor,viewport:{zoom:state.zoom.value,scrollX:state.scrollX,scrollY:state.scrollY}}}):serialized;
    await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
   }
   catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this whiteboard. Please try again.');setOpen(false)}
