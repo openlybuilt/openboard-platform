@@ -96,7 +96,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  })),[board.id]);
  const version=useRef(getSceneVersion(initial));
  useEffect(()=>{
-  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid')||['rectangle','ellipse','diamond'].includes(element.type)&&element.backgroundColor==='transparent') || (boardRef.current.scene?.elements.length??0)!==initial.length){
+  if(boardRef.current.scene?.elements.some(element=>element.customData?.kind==='arc-code-block'&&(element.type!=='rectangle'||element.link!==null||element.backgroundColor!=='#ffffff01'||element.fillStyle!=='solid')||element.customData?.kind==='openboard-frame-fill'&&element.strokeColor!=='transparent'||['rectangle','ellipse','diamond'].includes(element.type)&&element.backgroundColor==='transparent') || (boardRef.current.scene?.elements.length??0)!==initial.length){
    update({...boardRef.current,scene:{...boardRef.current.scene,elements:initial}});
   }
  },[initial,update]);
