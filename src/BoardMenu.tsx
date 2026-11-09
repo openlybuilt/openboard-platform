@@ -7,8 +7,8 @@ import { renderStyledText } from './text-format';
 
 function download(blob: Blob, filename: string) {
  const url=URL.createObjectURL(blob);
- const link=document.createElement('a');link.href=url;link.download=filename;link.click();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();
+ setTimeout(()=>{link.remove();URL.revokeObjectURL(url)},1000);
 }
 
 type SavePicker = (options:{suggestedName:string;types:Array<{description:string;accept:Record<string,string[]>}>})=>Promise<FileSystemFileHandle>;
@@ -32,7 +32,7 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
  const root=useRef<HTMLDivElement>(null);
  const dialog=useRef<HTMLDialogElement>(null);
  const trigger=useRef<HTMLButtonElement>(null);
- const filename=(name.trim()||'whiteboard').replace(/[\\/:*?"<>|]/g,'-');
+ const filename=(name.trim()||'board').replace(/[\\/:*?"<>|]/g,'-');
  useEffect(()=>{
   const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!root.current?.contains(event.target))setOpen(false)};
   const key=(event:KeyboardEvent)=>{if(event.key==='Escape'&&open){event.stopPropagation();setOpen(false);trigger.current?.focus()}};
@@ -47,11 +47,12 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
    const target=`${filename}.${format}`;
    const destination=await chooseDestination(target,format==='openboard'?'OpenBoard file':'Excalidraw file','application/json',`.${format}`);
    const {elements,files}=format==='excalidraw'?prepareExport():{elements:api.getSceneElementsIncludingDeleted(),files:api.getFiles()};
-   const serialized=serializeAsJSON(elements,api.getAppState(),files,'local');
-   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor}}):serialized;
-   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');setOpen(false)
+   const state=api.getAppState();
+   const serialized=serializeAsJSON(elements,state,files,'local');
+   const contents=format==='openboard'?JSON.stringify({...JSON.parse(serialized),openboard:{background,canvasColor:canvasColor??state.viewBackgroundColor,viewport:{zoom:state.zoom.value,scrollX:state.scrollX,scrollY:state.scrollY}}}):serialized;
+   await writeFile(destination,new Blob([contents],{type:'application/json'}),target);if(!destination)setNotice('Download requested. Check your browser’s downloads for the file.');setOpen(false)
   }
-  catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this whiteboard. Please try again.');setOpen(false)}
+  catch(error){if(error instanceof DOMException&&error.name==='AbortError'){setOpen(false);return}setError('Could not save this board. Please try again.');setOpen(false)}
  }
  function prepareExport(){
    if(!api)throw new Error('Editor unavailable');
@@ -79,15 +80,15 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
  async function exportImage(format:'png'|'svg'){
   if(!api)return;
   try{
-   if(!api.getSceneElements().length){setError('Add something to the whiteboard before exporting.');return}
+   if(!api.getSceneElements().length){setError('Add something to the board before exporting.');return}
    const target=`${filename}.${format}`;
    const destination=await chooseDestination(target,format==='png'?'PNG image':'SVG image',format==='png'?'image/png':'image/svg+xml',`.${format}`);
    const {elements,files}=prepareExport();
    const page=elements.find(element=>element.type==='frame'&&element.customData?.kind==='openboard-page');
    const opts={elements,appState:{...api.getAppState(),exportBackground:includeBackground,...(canvasColor?{viewBackgroundColor:canvasColor}:{})},files,exportPadding:20,exportingFrame:page?.type==='frame'?page:null};
    const blob=format==='png'?await exportToBlob({...opts,mimeType:'image/png'}):new Blob([new XMLSerializer().serializeToString(await exportToSvg(opts))],{type:'image/svg+xml'});
-   await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Saved using your browser’s download location. Turn on “ask where to save” in browser settings to choose a folder.');
-  }catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setError('Could not export this whiteboard. Please try again.')}
+   await writeFile(destination,blob,target);dialog.current?.close();if(!destination)setNotice('Download requested. Check your browser’s downloads for the file.');
+  }catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setError('Could not export this board. Please try again.')}
  }
  function find(){
   if(!api||!query.trim())return;
@@ -121,7 +122,7 @@ export function BoardMenu({api,name,theme,canvasColor,background,onThemeChange,o
    <div className="board-menu-dialog-head"><h2 id="board-menu-dialog-title">{panel==='search'?'Find on canvas':panel==='help'?'Help':panel==='export'?'Export image':panel==='open'?'Open a file?':'Reset canvas?'}</h2><button type="button" aria-label="Close" onClick={()=>dialog.current?.close()}><X size={18}/></button></div>
    {panel==='search'&&<form onSubmit={event=>{event.preventDefault();find()}}><label htmlFor="board-search">Search for text</label><input id="board-search" autoFocus value={query} onChange={event=>{setQuery(event.target.value);setError('')}} placeholder="Find text on this board"/><div className="board-menu-dialog-actions"><button type="submit" className="board-menu-primary">Find</button></div></form>}
    {panel==='help'&&<div className="board-menu-help"><p>Use the tools on the left to add and edit your diagram.</p><p>Select an object to move it or open its settings. Double-click a shape to add text.</p><p>Use the bottom slider to zoom. Your board saves automatically.</p></div>}
-   {panel==='export'&&<><p>Download your whiteboard as an image.</p><label className="board-menu-check"><input type="checkbox" checked={includeBackground} onChange={event=>setIncludeBackground(event.target.checked)}/> Include background</label><div className="board-menu-dialog-actions"><button type="button" onClick={()=>void exportImage('svg')}>SVG</button><button type="button" className="board-menu-primary" onClick={()=>void exportImage('png')}>PNG</button></div></>}
+   {panel==='export'&&<><p>Download your board as an image.</p><label className="board-menu-check"><input type="checkbox" checked={includeBackground} onChange={event=>setIncludeBackground(event.target.checked)}/> Include background</label><div className="board-menu-dialog-actions"><button type="button" onClick={()=>void exportImage('svg')}>SVG</button><button type="button" className="board-menu-primary" onClick={()=>void exportImage('png')}>PNG</button></div></>}
    {panel==='reset'&&<><p>This removes everything from the current canvas. You can undo this action.</p><div className="board-menu-dialog-actions"><button type="button" onClick={()=>dialog.current?.close()}>Cancel</button><button type="button" className="board-menu-primary" onClick={()=>{api?.updateScene({elements:[],captureUpdate:CaptureUpdateAction.IMMEDIATELY});dialog.current?.close()}}>Reset canvas</button></div></>}
    {panel==='open'&&<><p>Opening a file replaces the current canvas. Your current changes are saved in this board until you choose a file.</p><div className="board-menu-dialog-actions"><button type="button" onClick={()=>dialog.current?.close()}>Cancel</button><button type="button" className="board-menu-primary" onClick={()=>{dialog.current?.close();onOpen()}}>Choose file</button></div></>}
    {error&&<p className="board-menu-dialog-error" role="alert">{error}</p>}

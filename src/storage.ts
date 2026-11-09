@@ -2,14 +2,21 @@ import type { Edge, Node } from '@xyflow/react';
 import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 export type CanvasBackground = 'plain' | 'dots' | 'grid';
-export type Board = { id: string; name: string; updatedAt: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; canvasColor?: string; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState>; files?: BinaryFiles } };
+export type BoardViewport = { zoom: number; scrollX: number; scrollY: number };
+export type Board = { id: string; name: string; updatedAt: number; deletedAt?: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; canvasColor?: string; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState>; files?: BinaryFiles; viewport?: BoardViewport } };
 const KEY = 'whiteboard.boards.v1';
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+export function isExpiredDeleted(board: Board, now = Date.now()) {
+  return typeof board.deletedAt === 'number' && board.deletedAt <= now - TRASH_RETENTION_MS;
+}
 export function loadBoards(): Board[] {
   const raw = localStorage.getItem(KEY);
   if (!raw) return [];
   const boards: unknown = JSON.parse(raw);
   if (!Array.isArray(boards)) throw new Error('Saved boards could not be read.');
-  return boards;
+  const current = (boards as Board[]).filter(board => !isExpiredDeleted(board));
+  if (current.length !== boards.length) saveBoards(current);
+  return current;
 }
 export function saveBoards(boards: Board[]) { localStorage.setItem(KEY, JSON.stringify(boards)); }
 // Reconcile individual boards against the snapshot this tab last loaded. Never

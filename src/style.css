@@ -418,3 +418,24 @@ button:not(:disabled):active{transform:scale(.97)}
 .section-heading .board-search span{color:inherit}
 .app[data-theme="dark"] .board-list-controls .board-search{--border:#505050;--border-strong:#888;--surface:#2c2c2c;--surface-raised:#353535;--surface-muted:#404040;--foreground:#f3f3f3;--text-secondary:#ccc;--text-muted:#aaa;--focus-ring:#fff3;--shadow-floating:0 10px 30px #0008}
 @media(max-width:520px){.board-actions{gap:10px}.board-list-controls{gap:8px}.board-list-controls .primary{padding:10px 12px;font-size:12px;white-space:nowrap}}
+
+.board-home-tabs{display:flex;gap:6px;margin:0 0 16px;border-bottom:1px solid #e4e4e4}
+.board-home-tabs button{display:inline-flex;align-items:center;gap:7px;padding:11px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:#777;font-size:13px;font-weight:500}
+.board-home-tabs button[aria-pressed="true"]{border-bottom-color:#171717;color:#171717}
+.board-home-tabs button:hover{color:#171717}
+.board-home-tabs span{font-size:11px;color:inherit;opacity:.7}
+.board-open-file{width:44px;height:44px;padding:0;flex:0 0 44px}
+.deleted-date{display:block;margin:0 21px;color:#777;font-size:12px}
+.trash-card-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 21px 20px}
+.trash-card-actions button{display:inline-flex;align-items:center;gap:6px;padding:7px 9px;border:1px solid #dedede;border-radius:9px;background:transparent;color:#222;font-size:12px}
+.trash-card-actions button:hover{background:#f2f2f2}
+.trash-card-actions button:last-child{color:#a33d3d}
+.app[data-theme="dark"] .board-home-tabs{border-color:#494949}
+.app[data-theme="dark"] .board-home-tabs button{color:#aaa}
+.app[data-theme="dark"] .board-home-tabs button[aria-pressed="true"],.app[data-theme="dark"] .board-home-tabs button:hover{color:#f3f3f3}
+.app[data-theme="dark"] .board-home-tabs button[aria-pressed="true"]{border-bottom-color:#f3f3f3}
+.app[data-theme="dark"] .deleted-date{color:#aaa}
+.app[data-theme="dark"] .trash-card-actions button{color:#f3f3f3;border-color:#555}
+.app[data-theme="dark"] .trash-card-actions button:hover{background:#414141}
+.app[data-theme="dark"] .trash-card-actions button:last-child{color:#f1a5a5}
+@media(max-width:650px){.section-heading .board-actions{align-items:stretch;flex-direction:column}.board-list-controls{width:100%;justify-content:flex-start}.board-open-file{width:40px;height:40px;flex-basis:40px}.board-list-controls .board-search{min-width:44px}}

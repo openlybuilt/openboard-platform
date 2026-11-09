@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { Excalidraw, convertToExcalidrawElements, getSceneVersion, getCommonBounds, FONT_FAMILY, newElementWith, CaptureUpdateAction, loadFromBlob } from '@excalidraw/excalidraw';
+import { Excalidraw, convertToExcalidrawElements, getSceneVersion, getCommonBounds, FONT_FAMILY, newElementWith, CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI, ExcalidrawProps } from '@excalidraw/excalidraw/types';
 import { BoardCodeBlock } from './BoardCodeBlock';
 import { ColorPicker } from './ColorPicker';
@@ -11,6 +11,7 @@ import type { ExcalidrawTextElement } from '@excalidraw/excalidraw/element/types
 import { fontName, textStyle, type TextStyle } from './text-format';
 import { ArrowLeft, Menu, MousePointer2, Hand, Square, Diamond, Circle, ArrowUpRight, Minus, Pencil, Type, Frame, Code2, Eraser, SlidersHorizontal, Trash2, Workflow, Grid2X2, Check, Plus, ArrowLeftRight } from 'lucide-react';
 import { BoardMenu } from './BoardMenu';
+import { readBoardFile } from './board-file';
 import type { Board, CanvasBackground } from './storage';
 import '@excalidraw/excalidraw/index.css';
 
@@ -54,7 +55,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  const lastTextClick=useRef<{id:string;time:number}|null>(null);
  const [richText,setRichText]=useState<Array<{element:ExcalidrawTextElement;x:number;y:number;zoom:number;editing:boolean}>>([]);
  const [gridView,setGridView]=useState({size:24,x:0,y:0});
- const [zoom,setZoom]=useState(100);
+ const [zoom,setZoom]=useState(Math.round((board.scene?.viewport?.zoom??1)*100));
  const [showProperties,setShowProperties]=useState(false);
  const [importError,setImportError]=useState('');
  const [selectionPosition,setSelectionPosition]=useState<{x:number;y:number}|null>(null);
@@ -69,9 +70,11 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  const [position,setPosition]=useState<{x:number;y:number}|null>(null);
  const canvasRef=useRef<HTMLDivElement>(null);
  const importRef=useRef<HTMLInputElement>(null);
+ const viewportTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const dockRef=useRef<HTMLDivElement>(null);
  const drag=useRef<{x:number;y:number;left:number;top:number;moved:boolean}|null>(null);
  const boardRef=useRef(board); boardRef.current=board;
+ useEffect(()=>()=>{if(viewportTimer.current)clearTimeout(viewportTimer.current)},[]);
  const clearSelection=()=>{
   if(!api)return;
   api.updateScene({appState:{selectedElementIds:{},selectedGroupIds:{},editingGroupId:null,selectedLinearElement:null}});
@@ -161,24 +164,34 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
    }
    if(next===version.current&&!changedPreferences)return;
    version.current=next;
-   update({...boardRef.current,scene:{elements:[...elements],preferences:preferences.current,files}});
+   update({...boardRef.current,scene:{elements:[...elements],preferences:preferences.current,files,viewport:boardRef.current.scene?.viewport}});
  },[update,api,background]);
  async function openDiagram(file:File){
   if(!api)return;
   try{
-   const data=await loadFromBlob(file,api.getAppState(),null);
-   if(file.name.toLowerCase().endsWith('.openboard')){
-    const metadata=JSON.parse(await file.text()).openboard;
-    if(metadata&&typeof metadata==='object'){
-     const pattern:CanvasBackground=['plain','dots','grid'].includes(metadata.background)?metadata.background:'plain';
-     const color=typeof metadata.canvasColor==='string'&&/^#[0-9a-f]{6}$/i.test(metadata.canvasColor)?metadata.canvasColor:undefined;
-     setBackground(pattern);update({...boardRef.current,background:pattern,canvasColor:color});
-    }
-   }
-   api.addFiles(Object.values(data.files));
-   api.updateScene({elements:data.elements,captureUpdate:CaptureUpdateAction.IMMEDIATELY});
-   api.scrollToContent(data.elements,{fitToContent:true});
-  }catch{setImportError('Could not open this file. Choose a valid .openboard or .excalidraw file.')}
+   const imported=await readBoardFile(file);
+   const scene=imported.scene!;
+   const next={...boardRef.current,background:imported.background,canvasColor:imported.canvasColor,scene};
+   boardRef.current=next;
+   setBackground(imported.background??'plain');
+   update(next);
+   api.addFiles(Object.values(scene.files??{}));
+   const state=api.getAppState();
+   const view=scene.viewport!;
+   api.updateScene({elements:scene.elements,appState:{zoom:{...state.zoom,value:view.zoom as typeof state.zoom.value},scrollX:view.scrollX,scrollY:view.scrollY,viewBackgroundColor:imported.background==='plain'?(imported.canvasColor??'#ffffff'):'transparent'},captureUpdate:CaptureUpdateAction.IMMEDIATELY});
+   setZoom(Math.round(view.zoom*100));
+   setImportError('');
+  }catch(error){setImportError(error instanceof Error?error.message:'Could not open this file.')}
+ }
+ function rememberViewport(){
+  if(!api)return;
+  const state=api.getAppState();
+  const view={zoom:state.zoom.value,scrollX:state.scrollX,scrollY:state.scrollY};
+  setZoom(Math.round(view.zoom*100));
+  if(viewportTimer.current)clearTimeout(viewportTimer.current);
+  viewportTimer.current=setTimeout(()=>{
+   if(boardRef.current.scene)update({...boardRef.current,scene:{...boardRef.current.scene,viewport:view}});
+  },400);
  }
  function chooseBackground(value:CanvasBackground){setBackground(value);update({...boardRef.current,background:value});setBackgroundOpen(false)}
  function setColor(id:string,property:'strokeColor'|'backgroundColor',value:string){
@@ -470,9 +483,9 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
  function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
- return <main className="editor"><div className="editor-head"><button className="back" aria-label="All whiteboards" title="All whiteboards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':saveStatus==='sync-unavailable'?'Not saved, account sync unavailable':saveStatus==='not-saved'?<>Not saved, {onGuestSignIn?<button type="button" className="save-sign-in" onClick={onGuestSignIn}>please <span>sign in</span></button>:'please sign in'}</>:''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onDoubleClickCapture={editTextOnDoubleClick} onKeyDownCapture={typeIntoSelectedText} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
+ return <main className="editor"><div className="editor-head"><button className="back" aria-label="All boards" title="All boards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':saveStatus==='sync-unavailable'?'Not saved, account sync unavailable':saveStatus==='not-saved'?<>Not saved, {onGuestSignIn?<button type="button" className="save-sign-in" onClick={onGuestSignIn}>please <span>sign in</span></button>:'please sign in'}</>:''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onDoubleClickCapture={editTextOnDoubleClick} onKeyDownCapture={typeIntoSelectedText} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
   <input ref={importRef} type="file" accept=".openboard,.excalidraw,application/json" hidden onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void openDiagram(file)}}/>
-  <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(theme==='dark'?'#f0f0f0':'#ffffff'):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',currentItemBackgroundColor:'#ffffff01',currentItemFillStyle:'solid',...preferences.current},scrollToContent:true}} excalidrawAPI={setApi} onChange={onChange} onPointerDown={bindContainedText} onPointerUp={selectShapeInterior} onScrollChange={(_x,_y,value)=>setZoom(Math.round(value.value*100))} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}/>
+  <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(board.canvasColor??(theme==='dark'?'#f0f0f0':'#ffffff')):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',currentItemBackgroundColor:'#ffffff01',currentItemFillStyle:'solid',...preferences.current,...(board.scene?.viewport?{zoom:{value:board.scene.viewport.zoom as ReturnType<ExcalidrawImperativeAPI['getAppState']>['zoom']['value']},scrollX:board.scene.viewport.scrollX,scrollY:board.scene.viewport.scrollY}:{})},scrollToContent:!board.scene?.viewport}} excalidrawAPI={setApi} onChange={onChange} onPointerDown={bindContainedText} onPointerUp={selectShapeInterior} onScrollChange={rememberViewport} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}/>
   {richText.map(({element,x,y,zoom,editing})=>{const style=textStyle(element);if(!style||editing)return null;return <div key={element.id} className="rich-text-overlay" aria-hidden="true" style={{left:x,top:y,width:element.width*zoom,height:element.height*zoom,fontFamily:fontName(element.fontFamily),fontSize:element.fontSize*zoom,lineHeight:element.lineHeight,color:style.color,fontWeight:style.bold?700:400,fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:element.textAlign as CSSProperties['textAlign'],opacity:element.opacity/100,transform:`rotate(${element.angle}rad)`}}>{element.text}</div>})}
   <BoardMenu api={api} name={board.name} theme={theme} canvasColor={board.canvasColor} background={background} onThemeChange={onThemeChange} onOpen={()=>importRef.current?.click()} onShow={clearSelection}/>
   {importError&&<div className="board-menu-error" role="alert">{importError}<button type="button" onClick={()=>setImportError('')} aria-label="Dismiss error">×</button></div>}

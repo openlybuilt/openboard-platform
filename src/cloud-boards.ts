@@ -1,4 +1,4 @@
-import type { Board } from './storage';
+import { isExpiredDeleted, type Board } from './storage';
 
 type Change = {type:'put';board:Board}|{type:'delete';id:string};
 export type CloudConfig = { userId:string; getToken:()=>Promise<string|null>; apiUrl:string };
@@ -33,7 +33,10 @@ export class CloudBoards {
    if(change.type==='delete')byId.delete(change.id);
    else if(change.type==='put')byId.set(change.board.id,change.board);
   }
-  return [...byId.values()];
+  const boards=[...byId.values()];
+  const current=boards.filter(board=>!isExpiredDeleted(board));
+  if(current.length!==boards.length)this.enqueue(boards,current);
+  return current;
  }
  enqueue(previous:Board[],next:Board[]){
   const before=new Map(previous.map(board=>[board.id,board]));
