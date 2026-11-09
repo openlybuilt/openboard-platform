@@ -1,6 +1,7 @@
 import { getCommonBounds, loadFromBlob } from '@excalidraw/excalidraw';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type { Board, BoardViewport, CanvasBackground } from './storage';
+import { ensureFrameFills } from './frame-fills';
 
 const COLOR = /^#[0-9a-f]{6}$/i;
 const FILE_LIMIT_BYTES = 20_000_000;
@@ -47,6 +48,6 @@ export async function readBoardFile(file: File): Promise<Board> {
   const name = file.name.replace(/\.(openboard|excalidraw)$/i, '').trim().slice(0, 100) || 'Imported board';
   return {
     id: crypto.randomUUID(), name, updatedAt: Date.now(), nodes: [], edges: [], background, canvasColor,
-    scene: { elements: restored.elements, files: restored.files, viewport: savedViewport ?? centeredViewport(restored.elements) },
+    scene: { elements: ensureFrameFills(restored.elements), files: restored.files, viewport: savedViewport ?? centeredViewport(restored.elements) },
   };
 }
