@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { boardSnapshots, isExpiredDeleted, loadBoards, newBoard, reconcileLocalBoards, type Board } from './storage';
+import { boardSnapshots, isExpiredDeleted, loadBoards, newBoard, reconcileLocalBoards, loadFolders, saveFolders, type Folder, type Board } from './storage';
 import { CanvasEditor } from './CanvasEditor';
 import { BoardHome } from './BoardHome';
 import { readBoardFile } from './board-file';
@@ -15,10 +15,12 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
   const offlineHandoff=useRef(Boolean(syncUnavailable&&readHandoff()?.id===routeId())).current;
   const transient=guestUnsaved||offlineHandoff;
   const [boards,setBoards] = useState<Board[]>(() => { if(cloud)return []; if(guestUnsaved){const draft=readHandoff();return draft&&draft.id===routeId()?[draft]:[];} if(syncUnavailable){const draft=readHandoff();if(draft&&draft.id===routeId())return [draft];} try { return loadBoards(); } catch { return []; } });
-  const [error,setError] = useState(() => { if(cloud||guestUnsaved)return ''; try { loadBoards(); return ''; } catch { return 'Could not read your saved boards. Check browser storage before creating a new board.'; } });
+  const [error,setError] = useState(() => { if(cloud||guestUnsaved)return ''; try { loadBoards(); loadFolders(); return ''; } catch { return 'Could not read your saved boards or folders. Check browser storage before making changes.'; } });
   const [conflictNotice,setConflictNotice] = useState('');
-  const [readFailed,setReadFailed] = useState(() => { if(cloud||guestUnsaved)return false; try { loadBoards(); return false; } catch { return true; } });
+  const [readFailed,setReadFailed] = useState(() => { if(cloud||guestUnsaved)return false; try { loadBoards(); loadFolders(); return false; } catch { return true; } });
   const [loading,setLoading]=useState(Boolean(cloud));
+  const [folders,setFolders]=useState<Folder[]>(()=>{if(cloud||transient)return [];try{return loadFolders()}catch{return []}});
+  const foldersRef=useRef(folders); foldersRef.current=folders;
   const boardsRef=useRef(boards); boardsRef.current=boards;
   const snapshotsRef=useRef(boardSnapshots(boards));
   const redirectedBoards=useRef(new Map<string,string>());
@@ -36,7 +38,8 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
   useEffect(()=>{
    if(!cloud)return;
    let active=true;
-   cloud.load().then(async next=>{if(!active)return;
+   Promise.all([cloud.load(),cloud.loadFolders()]).then(async ([next,loadedFolders])=>{if(!active)return;
+    foldersRef.current=loadedFolders;setFolders(loadedFolders);
     let draft=readHandoff();
     if(draft&&draft.id===routeId()){
       const existing=next.find(board=>board.id===draft!.id);
@@ -48,7 +51,7 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
       if(!next.some(board=>board.id===draft!.id)){const withDraft=[draft,...next];cloud.enqueue(next,withDraft);next=withDraft;}
     } else draft=undefined;
     boardsRef.current=next;setBoards(next);setSaveStatus('saving');
-    await cloud.flush();
+    await Promise.all([cloud.flush(),cloud.flushFolders()]);
     if(active){if(draft)clearHandoff(draft.id);setLoading(false);setSaveStatus('saved');}
    }).catch(()=>{if(active){const draft=readHandoff();if(draft&&draft.id===routeId()){boardsRef.current=[draft];setBoards([draft])}setLoading(false);setReadFailed(true);setSaveStatus(null);setError(draft?'Could not load or sync your account boards. Your sign-in draft is kept in this tab; reload to try again.':'Could not load or sync your account boards. Reload to try again.')}});
    return ()=>{active=false};
@@ -59,7 +62,19 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
   useEffect(()=>{if(transient)return;const timer=setInterval(()=>{if(!boardsRef.current.some(board=>isExpiredDeleted(board)))return;if(cloud)commit(boardsRef.current.filter(board=>!isExpiredDeleted(board)));else try{const current=loadBoards();boardsRef.current=current;snapshotsRef.current=boardSnapshots(current);setBoards(current)}catch{setError('Could not remove expired boards from browser storage.')}},60_000);return ()=>clearInterval(timer)},[commit,transient,cloud]);
   const board=boards.find(b=>b.id===id&&!b.deletedAt);
   const update=useCallback((next:Board)=>{const target=redirectedBoards.current.get(next.id)??next.id;commit(boardsRef.current.map(b=>b.id===target?{...next,id:target,updatedAt:Date.now()}:b));},[commit]);
-  const create=()=>{const next=newBoard();if(commit([next,...boardsRef.current]))navigate(next.id)};
+  const create=(folderId?:string)=>{const next={...newBoard(),...(folderId?{folderId}:{})};if(commit([next,...boardsRef.current]))navigate(next.id)};
+  const changeFolder=(change:{type:'put';folder:Folder}|{type:'delete';id:string})=>{
+   if(readFailed||loading||transient)return false;
+   try{
+    const current=cloud?foldersRef.current:loadFolders();
+    const next=change.type==='put'?[...current.filter(folder=>folder.id!==change.folder.id),change.folder]:current.filter(folder=>folder.id!==change.id);
+    if(cloud)cloud.enqueueFolder(change);else saveFolders(next);
+    foldersRef.current=next;setFolders(next);setError('');
+    if(cloud)void cloud.flushFolders().catch(()=>setError('Could not sync folders. Changes are saved in this browser and will retry on your next edit or reload.'));
+    return true;
+   }catch{setError('Could not save folders. Check that browser storage is available.');return false}
+  };
+  const moveBoard=(board:Board,folderId:string)=>{const {folderId:_old,...rest}=board;commit(boardsRef.current.map(item=>item.id===board.id?{...rest,...(folderId?{folderId}:{}),updatedAt:Date.now()}:item))};
   const remove=()=>{if(!boardToDelete)return;const now=Date.now();const next=boardToDelete.deletedAt?boardsRef.current.filter(board=>board.id!==boardToDelete.id):boardsRef.current.map(board=>board.id===boardToDelete.id?{...board,deletedAt:now,updatedAt:now}:board);if(commit(next))deleteDialog.current?.close()};
   const restore=(board:Board)=>{if(isExpiredDeleted(board)){setError('This board has passed the 30-day recovery period.');return}const {deletedAt:_deletedAt,...restored}=board;commit(boardsRef.current.map(item=>item.id===board.id?{...restored,updatedAt:Date.now()}:item))};
   const importBoard=async(file:File)=>{try{const imported=await readBoardFile(file);if(cloud&&new TextEncoder().encode(JSON.stringify(imported)).length>2_000_000)throw new Error('This file is too large for account storage.');if(commit([imported,...boardsRef.current]))navigate(imported.id)}catch(error){setError(error instanceof Error?error.message:'Could not open this file.')}};
@@ -67,6 +82,6 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
   const discardAndLeave=()=>{if(id)clearHandoff(id);leaveDialog.current?.close();allowGuestExit.current=true;boardsRef.current=[];setBoards([]);navigate()};
   const signInToSave=onGuestSignIn&&guestUnsaved&&board?()=>{try{sessionStorage.setItem(HANDOFF_KEY,JSON.stringify(board));onGuestSignIn()}catch{setError('Could not prepare this board for sign-in. Keep this tab open and try again.')}}:undefined;
   if(loading)return <main className="missing">Loading boards…</main>;
-  return <div className="app" data-theme={theme}>{syncUnavailable&&<div className="notice">{offlineHandoff?'Account syncing is not configured. This board is not saved to your account.':'Account syncing is not configured. Your boards are stored in this browser.'}</div>}{error&&<div className="notice" role="alert">{error}</div>}{conflictNotice&&<div className="notice" role="status">{conflictNotice}</div>}{id ? board ? <CanvasEditor key={board.id} board={board} update={update} saveStatus={saveStatus} theme={theme} onThemeChange={setTheme} onBack={back} onGuestSignIn={signInToSave}/> : <main className="missing"><h1>Board not found</h1><button className="primary" onClick={()=>navigate()}>Back to boards</button></main> : <BoardHome boards={boards} authConfigured={authConfigured} guestUnsaved={guestUnsaved} theme={theme} onThemeChange={setTheme} onCreate={create} onOpen={boardId=>navigate(boardId)} onImport={file=>{void importBoard(file)}} onDelete={setBoardToDelete} onRestore={restore}/>}<dialog ref={deleteDialog} className="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description" onClose={()=>setBoardToDelete(null)} onClick={e=>{if(e.target===e.currentTarget)e.currentTarget.close()}}><div className="delete-dialog-icon"><Trash2 size={20}/></div><h2 id="delete-dialog-title">Delete board?</h2><p id="delete-dialog-description">{boardToDelete?.deletedAt?<>“{boardToDelete.name}” will be permanently deleted. This cannot be undone.</>:<>“{boardToDelete?.name}” will move to Recently deleted. You can restore it within 30 days.</>}</p><div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>deleteDialog.current?.close()}>Cancel</button><button type="button" className="delete-dialog-confirm" onClick={remove}>{boardToDelete?.deletedAt?'Delete permanently':'Move to Recently deleted'}</button></div></dialog><dialog ref={leaveDialog} className="delete-dialog" aria-labelledby="leave-dialog-title" aria-describedby="leave-dialog-description" onClick={e=>{if(e.target===e.currentTarget)e.currentTarget.close()}}><h2 id="leave-dialog-title">Leave this board?</h2><p id="leave-dialog-description">Your progress will not be saved. Sign in to save your work to your account.</p><div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>leaveDialog.current?.close()}>Keep editing</button><button type="button" className="delete-dialog-confirm" onClick={discardAndLeave}>Leave</button></div></dialog></div>;
+  return <div className="app" data-theme={theme}>{syncUnavailable&&<div className="notice">{offlineHandoff?'Account syncing is not configured. This board is not saved to your account.':'Account syncing is not configured. Your boards are stored in this browser.'}</div>}{error&&<div className="notice" role="alert">{error}</div>}{conflictNotice&&<div className="notice" role="status">{conflictNotice}</div>}{id ? board ? <CanvasEditor key={board.id} board={board} update={update} saveStatus={saveStatus} theme={theme} onThemeChange={setTheme} onBack={back} onGuestSignIn={signInToSave}/> : <main className="missing"><h1>Board not found</h1><button className="primary" onClick={()=>navigate()}>Back to boards</button></main> : <BoardHome boards={boards} folders={folders} onFolderChange={changeFolder} onMove={moveBoard} authConfigured={authConfigured} guestUnsaved={guestUnsaved} theme={theme} onThemeChange={setTheme} onCreate={create} onOpen={boardId=>navigate(boardId)} onImport={file=>{void importBoard(file)}} onDelete={setBoardToDelete} onRestore={restore}/>}<dialog ref={deleteDialog} className="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description" onClose={()=>setBoardToDelete(null)} onClick={e=>{if(e.target===e.currentTarget)e.currentTarget.close()}}><div className="delete-dialog-icon"><Trash2 size={20}/></div><h2 id="delete-dialog-title">Delete board?</h2><p id="delete-dialog-description">{boardToDelete?.deletedAt?<>“{boardToDelete.name}” will be permanently deleted. This cannot be undone.</>:<>“{boardToDelete?.name}” will move to Recently deleted. You can restore it within 30 days.</>}</p><div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>deleteDialog.current?.close()}>Cancel</button><button type="button" className="delete-dialog-confirm" onClick={remove}>{boardToDelete?.deletedAt?'Delete permanently':'Move to Recently deleted'}</button></div></dialog><dialog ref={leaveDialog} className="delete-dialog" aria-labelledby="leave-dialog-title" aria-describedby="leave-dialog-description" onClick={e=>{if(e.target===e.currentTarget)e.currentTarget.close()}}><h2 id="leave-dialog-title">Leave this board?</h2><p id="leave-dialog-description">Your progress will not be saved. Sign in to save your work to your account.</p><div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>leaveDialog.current?.close()}>Keep editing</button><button type="button" className="delete-dialog-confirm" onClick={discardAndLeave}>Leave</button></div></dialog></div>;
 }
 
