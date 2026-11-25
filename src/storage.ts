@@ -56,7 +56,7 @@ export function reconcileLocalBoards(previous: Board[], next: Board[], snapshots
 }
 export function newBoard(): Board { return {id: crypto.randomUUID(), name: 'Untitled board', updatedAt: Date.now(), nodes: [], edges: []}; }
 
-export type Folder = { id: string; name: string };
+export type Folder = { id: string; name: string; parentId?: string | null };
 const FOLDERS_KEY = 'whiteboard.folders.v1';
 export function loadFolders(): Folder[] {
   const raw = localStorage.getItem(FOLDERS_KEY);

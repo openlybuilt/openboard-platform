@@ -68,10 +68,16 @@ export class CloudBoards {
   for(const change of this.pendingFolders())if(change.type==='delete')byId.delete(change.id);else byId.set(change.folder.id,change.folder);
   return [...byId.values()];
  }
- enqueueFolder(change:{type:'put';folder:Folder}|{type:'delete';id:string}){
-  const id=change.type==='put'?change.folder.id:change.id;
-  const queue=this.pendingFolders().filter((item,index)=>index===0&&Boolean(this.folderFlushing)||(item.type==='put'?item.folder.id:item.id)!==id);
-  queue.push(change);localStorage.setItem(this.folderKey,JSON.stringify(queue));
+ enqueueFolder(change:{type:'put';folder:Folder}|{type:'delete';id:string}){this.enqueueFolders([change])}
+ enqueueFolders(changes:({type:'put';folder:Folder}|{type:'delete';id:string})[]){
+  let queue=this.pendingFolders();
+  for(const change of changes){
+   const id=change.type==='put'?change.folder.id:change.id;
+   const index=queue.findIndex((item,index)=>!(index===0&&this.folderFlushing)&&(item.type==='put'?item.folder.id:item.id)===id);
+   if(index>=0 && change.type==='put')queue[index]=change;
+   else { if(index>=0)queue.splice(index,1); queue.push(change); }
+  }
+  localStorage.setItem(this.folderKey,JSON.stringify(queue));
  }
  flushFolders():Promise<void>{
   if(this.folderFlushing)return this.folderFlushing;
