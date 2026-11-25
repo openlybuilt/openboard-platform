@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Boxes, Folder, FolderOpen, Moon, Plus, RotateCcw, Sun, Trash2 } from 'lucide-react';
 import { AuthControls } from './AuthControls';
 import { BoardThumbnail } from './BoardThumbnail';
@@ -31,15 +31,32 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
   const [view, setView] = useState<'boards' | 'deleted'>('boards');
   const fileInput = useRef<HTMLInputElement>(null);
   const [selectedFolder, setSelectedFolder] = useState('all');
+  const [editingFolder, setEditingFolder] = useState<BoardFolder | null>(null);
+  const [folderName, setFolderName] = useState('');
+  const [folderToDelete, setFolderToDelete] = useState<BoardFolder | null>(null);
+  const folderDialog = useRef<HTMLDialogElement>(null);
+  const deleteFolderDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (editingFolder && !folderDialog.current?.open) folderDialog.current?.showModal(); }, [editingFolder]);
+  useEffect(() => { if (folderToDelete && !deleteFolderDialog.current?.open) deleteFolderDialog.current?.showModal(); }, [folderToDelete]);
   const active = boards.filter(board => !board.deletedAt);
   const deleted = boards.filter(board => board.deletedAt && !isExpiredDeleted(board));
   const folderIds = new Set(folders.map(folder => folder.id));
   const selected = folders.find(folder => folder.id === selectedFolder);
   const selection = selectedFolder === 'all' ? active : selectedFolder === 'unfiled' || !selected ? active.filter(board => !board.folderId || !folderIds.has(board.folderId)) : active.filter(board => board.folderId === selectedFolder);
   const shown = view === 'boards' ? selection : deleted;
-  const createFolder = () => { const name=window.prompt('Folder name')?.trim(); if(name)onFolderChange({type:'put',folder:{id:crypto.randomUUID(),name:name.slice(0,100)}}); };
-  const renameFolder = (folder:BoardFolder) => { const name=window.prompt('Rename folder',folder.name)?.trim(); if(name)onFolderChange({type:'put',folder:{...folder,name:name.slice(0,100)}}); };
-  const deleteFolder = (folder:BoardFolder) => { if(window.confirm(`Delete “${folder.name}”? Its boards will move to Unfiled.`) && onFolderChange({type:'delete',id:folder.id}))setSelectedFolder('all'); };
+  const createFolder = () => { setFolderName(''); setEditingFolder({id:crypto.randomUUID(),name:''}); };
+  const renameFolder = (folder:BoardFolder) => { setFolderName(folder.name); setEditingFolder(folder); };
+  const saveFolder = () => {
+    const name=folderName.trim(); if(!editingFolder || !name)return;
+    if(onFolderChange({type:'put',folder:{...editingFolder,name}})){
+      setSelectedFolder(editingFolder.id); folderDialog.current?.close();
+    }
+  };
+  const deleteFolder = () => {
+    if(folderToDelete && onFolderChange({type:'delete',id:folderToDelete.id})){
+      setSelectedFolder('all'); deleteFolderDialog.current?.close();
+    }
+  };
 
   return <main className="home">
     {authConfigured && <AuthControls />}
@@ -53,9 +70,8 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
     <input ref={fileInput} type="file" accept=".openboard,.excalidraw,application/json" hidden onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) onImport(file); }}/>
     <div className="folder-layout">{view === 'boards' && !guestUnsaved && <nav className="folder-sidebar" aria-label="Board folders">
       <button type="button" aria-pressed={selectedFolder === 'all'} onClick={() => setSelectedFolder('all')}>All boards <span>{active.length}</span></button>
-      <button type="button" aria-pressed={selectedFolder === 'unfiled'} onClick={() => setSelectedFolder('unfiled')}>Unfiled <span>{active.filter(board=>!board.folderId||!folderIds.has(board.folderId)).length}</span></button>
       <div className="folder-label">Folders</div>
-      {[...folders].sort((a,b)=>a.name.localeCompare(b.name)).map(folder=><div className="folder-row" key={folder.id}><button type="button" aria-pressed={selectedFolder===folder.id} onClick={()=>setSelectedFolder(folder.id)}><Folder size={16}/> <span className="folder-name">{folder.name}</span> <span>{active.filter(board=>board.folderId===folder.id).length}</span></button>{selectedFolder===folder.id&&<div className="folder-manage"><button type="button" onClick={()=>renameFolder(folder)}>Rename</button><button type="button" onClick={()=>deleteFolder(folder)}>Delete</button></div>}</div>)}
+      {[...folders].sort((a,b)=>a.name.localeCompare(b.name)).map(folder=><div className="folder-row" key={folder.id}><button type="button" aria-pressed={selectedFolder===folder.id} onClick={()=>setSelectedFolder(folder.id)}><Folder size={16}/> <span className="folder-name">{folder.name}</span> <span>{active.filter(board=>board.folderId===folder.id).length}</span></button>{selectedFolder===folder.id&&<div className="folder-manage"><button type="button" onClick={()=>renameFolder(folder)}>Rename</button><button type="button" onClick={()=>setFolderToDelete(folder)}>Delete</button></div>}</div>)}
       <button type="button" onClick={createFolder}><Plus size={16}/> New folder</button>
     </nav>}<section className="folder-content" aria-label={selected?.name ?? 'Boards'}>
     <div className="section-heading"><div className="board-actions">
@@ -68,11 +84,22 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
     </div></div>
     {shown.length ? <div className="board-grid">{[...shown].sort((a, b) => (view === 'deleted' ? (b.deletedAt ?? 0) - (a.deletedAt ?? 0) : b.updatedAt - a.updatedAt)).map(board =>
       <article className="board-card" key={board.id}>
-        {view === 'boards' ? <button className="board-open" type="button" onClick={() => onOpen(board.id)} aria-label={`Open ${board.name}`}><BoardThumbnail board={board} theme={theme}/><div className="card-title">{board.name}</div><small>Edited {formatDate(board.updatedAt)}</small></button> : <><BoardThumbnail board={board} theme={theme}/><div className="card-title">{board.name}</div><small className="deleted-date">Deleted {formatDate(board.deletedAt!)} · {Math.max(1, Math.ceil((board.deletedAt! + TRASH_RETENTION_MS - Date.now()) / 86_400_000))} days left</small><div className="trash-card-actions"><button type="button" onClick={() => onRestore(board)}><RotateCcw size={15}/> Restore</button><button type="button" onClick={() => onDelete(board)}><Trash2 size={15}/> Delete permanently</button></div></>}
-        {view === 'boards' && !guestUnsaved && <label className="board-folder-select"><span className="sr-only">Folder for {board.name}</span><select aria-label={`Folder for ${board.name}`} value={board.folderId && folderIds.has(board.folderId)?board.folderId:''} onChange={event=>onMove(board,event.target.value)}><option value="">Unfiled</option>{folders.map(folder=><option value={folder.id} key={folder.id}>{folder.name}</option>)}</select></label>}
+        {view === 'boards' ? <button className="board-open" type="button" onClick={() => onOpen(board.id)} aria-label={`Open ${board.name}`}><BoardThumbnail board={board} theme={theme}/><div className="card-title"><span className="board-card-name" title={board.name}>{board.name}</span>{board.folderId && folders.find(folder=>folder.id===board.folderId) && <span className="board-folder-name" title={folders.find(folder=>folder.id===board.folderId)?.name}>{folders.find(folder=>folder.id===board.folderId)?.name}</span>}</div><small>Edited {formatDate(board.updatedAt)}</small></button> : <><BoardThumbnail board={board} theme={theme}/><div className="card-title">{board.name}</div><small className="deleted-date">Deleted {formatDate(board.deletedAt!)} · {Math.max(1, Math.ceil((board.deletedAt! + TRASH_RETENTION_MS - Date.now()) / 86_400_000))} days left</small><div className="trash-card-actions"><button type="button" onClick={() => onRestore(board)}><RotateCcw size={15}/> Restore</button><button type="button" onClick={() => onDelete(board)}><Trash2 size={15}/> Delete permanently</button></div></>}
+        {view === 'boards' && !guestUnsaved && <details className="board-move"><summary aria-label={`Move ${board.name} to a folder`} title="Move to folder"><Folder size={16}/></summary><div className="board-move-menu"><strong>Move to</strong>{board.folderId && folderIds.has(board.folderId) && <button type="button" onClick={event=>{onMove(board,'');event.currentTarget.closest('details')?.removeAttribute('open')}}>Remove from folder</button>}{folders.map(folder=><button type="button" key={folder.id} disabled={board.folderId===folder.id} onClick={event=>{onMove(board,folder.id);event.currentTarget.closest('details')?.removeAttribute('open')}}>{folder.name}</button>)}{folders.length===0 && <span>Create a folder first</span>}</div></details>}
         {view === 'boards' && <button className="delete" type="button" aria-label={`Delete ${board.name}`} onClick={() => onDelete(board)}><Trash2 size={16}/></button>}
       </article>
     )}</div> : <div className="empty"><div className="empty-icon">{view === 'boards' ? <Boxes size={25}/> : <Trash2 size={23}/>}</div><h3>{view === 'boards' ? (active.length ? 'No boards here yet.' : 'Your first idea starts here.') : 'Nothing recently deleted.'}</h3><p>{view === 'boards' ? 'Create a board to map out an architecture, a system, or anything on your mind.' : 'Deleted boards stay here for 30 days before they are removed.'}</p>{view === 'boards' && <button className="secondary" type="button" onClick={() => onCreate(selected?.id)}><Plus size={16}/> Create a board</button>}</div>}
     </section></div>
+    <dialog ref={folderDialog} className="delete-dialog folder-dialog" aria-labelledby="folder-dialog-title" onClose={()=>setEditingFolder(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
+      <form onSubmit={event=>{event.preventDefault();saveFolder()}}>
+        <h2 id="folder-dialog-title">{editingFolder?.name ? 'Rename folder' : 'New folder'}</h2>
+        <label htmlFor="folder-name">Folder name</label><input id="folder-name" autoFocus maxLength={100} value={folderName} onChange={event=>setFolderName(event.target.value)} placeholder="Give your folder a name" required/>
+        <div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" onClick={()=>folderDialog.current?.close()}>Cancel</button><button type="submit" className="folder-save" disabled={!folderName.trim()}>{editingFolder?.name ? 'Save' : 'Create folder'}</button></div>
+      </form>
+    </dialog>
+    <dialog ref={deleteFolderDialog} className="delete-dialog" aria-labelledby="delete-folder-title" onClose={()=>setFolderToDelete(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
+      <h2 id="delete-folder-title">Delete folder?</h2><p>“{folderToDelete?.name}” will be deleted. Its boards will remain in All boards.</p>
+      <div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>deleteFolderDialog.current?.close()}>Cancel</button><button type="button" className="delete-dialog-confirm" onClick={deleteFolder}>Delete folder</button></div>
+    </dialog>
   </main>;
 }
