@@ -15,6 +15,7 @@ type Props = {
   boards: Board[];
   folders: BoardFolder[];
   onFolderChange: (change: {type:'put';folder:BoardFolder}|{type:'delete';id:string}) => boolean;
+  onDeleteFolder: (folder:BoardFolder) => boolean;
   onMove: (board:Board, folderId:string) => void;
   authConfigured: boolean;
   guestUnsaved: boolean;
@@ -27,7 +28,7 @@ type Props = {
   onRestore: (board: Board) => void;
 };
 
-export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigured, guestUnsaved, theme, onThemeChange, onCreate, onOpen, onImport, onDelete, onRestore }: Props) {
+export function BoardHome({ boards, folders, onFolderChange, onDeleteFolder, onMove, authConfigured, guestUnsaved, theme, onThemeChange, onCreate, onOpen, onImport, onDelete, onRestore }: Props) {
   const [view, setView] = useState<'boards' | 'deleted'>('boards');
   const fileInput = useRef<HTMLInputElement>(null);
   const [selectedFolder, setSelectedFolder] = useState('all');
@@ -66,7 +67,7 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
     }
   };
   const deleteFolder = () => {
-    if(folderToDelete && onFolderChange({type:'delete',id:folderToDelete.id})){
+    if(folderToDelete && onDeleteFolder(folderToDelete)){
       setSelectedFolder('all'); deleteFolderDialog.current?.close();
     }
   };
@@ -111,7 +112,7 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
       </form>
     </dialog>
     <dialog ref={deleteFolderDialog} className="delete-dialog folder-delete-dialog" aria-labelledby="delete-folder-title" onClose={()=>setFolderToDelete(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
-      <h2 id="delete-folder-title">Delete folder?</h2><p>“{folderToDelete?.name}” will be deleted. {folderToDelete && active.filter(board=>board.folderId===folderToDelete.id).length > 0 ? <>{active.filter(board=>board.folderId===folderToDelete.id).length} {active.filter(board=>board.folderId===folderToDelete.id).length === 1 ? 'board is' : 'boards are'} inside and will remain in All boards.</> : 'Any boards in it will remain in All boards.'}</p>
+      <h2 id="delete-folder-title">Delete folder?</h2><p>“{folderToDelete?.name}” will be deleted. {folderToDelete && active.filter(board=>board.folderId===folderToDelete.id).length > 0 ? <>{active.filter(board=>board.folderId===folderToDelete.id).length} {active.filter(board=>board.folderId===folderToDelete.id).length === 1 ? 'board will' : 'boards will'} move to Recently deleted. You can restore them within 30 days.</> : 'This folder has no active boards.'}</p>
       <div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>deleteFolderDialog.current?.close()}>Cancel</button><button type="button" className="delete-dialog-confirm" onClick={deleteFolder}>Delete folder</button></div>
     </dialog>
   </main>;

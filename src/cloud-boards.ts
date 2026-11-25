@@ -77,6 +77,7 @@ export class CloudBoards {
   if(this.folderFlushing)return this.folderFlushing;
   this.folderFlushing=(async()=>{while(true){
    const change=this.pendingFolders()[0];if(!change)break;
+   if(change.type==='delete')await this.flush();
    const id=change.type==='put'?change.folder.id:change.id;
    await this.request(`/folders/${encodeURIComponent(id)}`,change.type==='put'?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(change.folder)}:{method:'DELETE'});
    const remaining=this.pendingFolders();remaining.shift();
