@@ -460,3 +460,5 @@ button:not(:disabled):active{transform:scale(.97)}
 .folder-dialog[open]{animation:folder-dialog-open 220ms cubic-bezier(.2,.7,.2,1) both}.folder-dialog[open]::backdrop{animation:folder-backdrop-open 220ms ease both}@keyframes folder-dialog-open{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes folder-backdrop-open{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){.folder-dialog[open],.folder-dialog[open]::backdrop{animation:none}}
 
 .folder-actions-menu .folder-delete-action{color:#b43b3b}.app[data-theme=dark] .folder-actions-menu .folder-delete-action{color:#f1a5a5}.folder-delete-dialog[open]{animation:folder-dialog-open 220ms cubic-bezier(.2,.7,.2,1) both}.folder-delete-dialog[open]::backdrop{animation:folder-backdrop-open 220ms ease both}@media(prefers-reduced-motion:reduce){.folder-delete-dialog[open],.folder-delete-dialog[open]::backdrop{animation:none}}
+
+.board-move-disabled{position:absolute;right:48px;bottom:13px;display:grid;place-items:center;padding:7px;border:0;background:transparent;color:#929a90;opacity:.4;cursor:not-allowed}
