@@ -1,4 +1,4 @@
-import { isExpiredDeleted, type Board } from './storage';
+import { isExpiredDeleted, type Board, type Folder } from './storage';
 
 type Change = {type:'put';board:Board}|{type:'delete';id:string};
 export type CloudConfig = { userId:string; getToken:()=>Promise<string|null>; apiUrl:string };
@@ -6,6 +6,8 @@ export type CloudConfig = { userId:string; getToken:()=>Promise<string|null>; ap
 export class CloudBoards {
  private readonly key:string;
  private flushing:Promise<void>|null=null;
+ private folderFlushing:Promise<void>|null=null;
+ private get folderKey(){return `whiteboard.pending-folders.${this.config.userId}`}
  constructor(private readonly config:CloudConfig){this.key=`whiteboard.pending.${config.userId}`}
  private pending():Change[]{
   const raw=localStorage.getItem(this.key);
@@ -53,6 +55,35 @@ export class CloudBoards {
    }
    localStorage.setItem(this.key,JSON.stringify(queue));
   }
+ }
+ private pendingFolders():({type:'put';folder:Folder}|{type:'delete';id:string})[]{
+  const raw=localStorage.getItem(this.folderKey); if(!raw)return [];
+  const result:unknown=JSON.parse(raw); if(!Array.isArray(result))throw new Error('Could not read pending folder changes');
+  return result;
+ }
+ async loadFolders():Promise<Folder[]>{
+  const response=await this.request('/folders'); const data=await response.json() as {folders:Folder[]};
+  if(!Array.isArray(data.folders))throw new Error('Invalid folder response');
+  const byId=new Map(data.folders.map(folder=>[folder.id,folder]));
+  for(const change of this.pendingFolders())if(change.type==='delete')byId.delete(change.id);else byId.set(change.folder.id,change.folder);
+  return [...byId.values()];
+ }
+ enqueueFolder(change:{type:'put';folder:Folder}|{type:'delete';id:string}){
+  const id=change.type==='put'?change.folder.id:change.id;
+  const queue=this.pendingFolders().filter((item,index)=>index===0&&Boolean(this.folderFlushing)||(item.type==='put'?item.folder.id:item.id)!==id);
+  queue.push(change);localStorage.setItem(this.folderKey,JSON.stringify(queue));
+ }
+ flushFolders():Promise<void>{
+  if(this.folderFlushing)return this.folderFlushing;
+  this.folderFlushing=(async()=>{while(true){
+   const change=this.pendingFolders()[0];if(!change)break;
+   if(change.type==='delete')await this.flush();
+   const id=change.type==='put'?change.folder.id:change.id;
+   await this.request(`/folders/${encodeURIComponent(id)}`,change.type==='put'?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(change.folder)}:{method:'DELETE'});
+   const remaining=this.pendingFolders();remaining.shift();
+   if(remaining.length)localStorage.setItem(this.folderKey,JSON.stringify(remaining));else localStorage.removeItem(this.folderKey);
+  }})().finally(()=>{this.folderFlushing=null});
+  return this.folderFlushing;
  }
  flush():Promise<void>{
   if(this.flushing)return this.flushing;

@@ -3,7 +3,7 @@ import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 export type CanvasBackground = 'plain' | 'dots' | 'grid';
 export type BoardViewport = { zoom: number; scrollX: number; scrollY: number };
-export type Board = { id: string; name: string; updatedAt: number; deletedAt?: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; canvasColor?: string; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState>; files?: BinaryFiles; viewport?: BoardViewport } };
+export type Board = { id: string; name: string; updatedAt: number; folderId?: string; deletedAt?: number; nodes: Node[]; edges: Edge[]; background?: CanvasBackground; canvasColor?: string; scene?: { elements: readonly ExcalidrawElement[]; preferences?: Partial<AppState>; files?: BinaryFiles; viewport?: BoardViewport } };
 const KEY = 'whiteboard.boards.v1';
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export function isExpiredDeleted(board: Board, now = Date.now()) {
@@ -55,3 +55,14 @@ export function reconcileLocalBoards(previous: Board[], next: Board[], snapshots
   return {boards, conflicts};
 }
 export function newBoard(): Board { return {id: crypto.randomUUID(), name: 'Untitled board', updatedAt: Date.now(), nodes: [], edges: []}; }
+
+export type Folder = { id: string; name: string };
+const FOLDERS_KEY = 'whiteboard.folders.v1';
+export function loadFolders(): Folder[] {
+  const raw = localStorage.getItem(FOLDERS_KEY);
+  if (!raw) return [];
+  const folders: unknown = JSON.parse(raw);
+  if (!Array.isArray(folders) || !folders.every(folder => folder && typeof folder.id === 'string' && typeof folder.name === 'string')) throw new Error('Saved folders could not be read.');
+  return folders;
+}
+export function saveFolders(folders: Folder[]) { localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders)); }
