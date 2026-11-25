@@ -54,6 +54,9 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  const [colorSelection,setColorSelection]=useState<{id:string;stroke:string;fill:string;canFill:boolean;labelId?:string;labelColor?:string}|null>(null);
  const [selectedText,setSelectedText]=useState<ExcalidrawTextElement|null>(null);
  const lastTextClick=useRef<{id:string;time:number}|null>(null);
+ const lastLabelClick=useRef<{id:string;time:number}|null>(null);
+ const labelEditing=useRef<{id:string;started:boolean}|null>(null);
+ const labelDrag=useRef<{pointerId:number;id:string;containerId:string;clientX:number;clientY:number;x:number;y:number;customData:ExcalidrawTextElement['customData'];moved:boolean}|null>(null);
  const [richText,setRichText]=useState<Array<{element:ExcalidrawTextElement;x:number;y:number;zoom:number;editing:boolean}>>([]);
  const [gridView,setGridView]=useState({size:24,x:0,y:0});
  const [zoom,setZoom]=useState(Math.round((board.scene?.viewport?.zoom??1)*100));
@@ -101,6 +104,28 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
   }
  },[initial,update]);
  const onChange:NonNullable<ExcalidrawProps['onChange']>=useCallback((elements,state,files)=>{
+   if(labelEditing.current){if(state.editingTextElement?.id===labelEditing.current.id)labelEditing.current.started=true;else if(labelEditing.current.started)labelEditing.current=null}
+   if(api){
+    const byId=new Map(elements.map(element=>[element.id,element]));
+    const misplaced=elements.some(element=>{
+     if(element.type!=='text'||!element.containerId||element.isDeleted||state.editingTextElement?.id===element.id||labelEditing.current?.id===element.id)return false;
+     const offset=element.customData?.openboardLabelOffset as {x?:unknown;y?:unknown}|undefined;
+     const container=byId.get(element.containerId);
+     return !!container && !container.isDeleted && typeof offset?.x==='number' && typeof offset.y==='number' && (Math.abs(element.x-container.x-offset.x)>.01||Math.abs(element.y-container.y-offset.y)>.01);
+    });
+    if(misplaced){queueMicrotask(()=>{
+     const current=api.getSceneElementsIncludingDeleted();const currentById=new Map(current.map(element=>[element.id,element]));
+     const next=current.map(element=>{
+      if(element.type!=='text'||!element.containerId||element.isDeleted||api.getAppState().editingTextElement?.id===element.id||labelEditing.current?.id===element.id)return element;
+      const offset=element.customData?.openboardLabelOffset as {x?:unknown;y?:unknown}|undefined;
+      const container=currentById.get(element.containerId);
+      if(!container||container.isDeleted||typeof offset?.x!=='number'||typeof offset.y!=='number')return element;
+      const x=container.x+offset.x,y=container.y+offset.y;
+      return Math.abs(element.x-x)>.01||Math.abs(element.y-y)>.01?newElementWith(element,{x,y}):element;
+     });
+     if(next.some((element,index)=>element!==current[index]))api.updateScene({elements:next,captureUpdate:CaptureUpdateAction.NEVER});
+    });return}
+   }
    const fitted=fitFrameFills(elements);
    if(fitted&&api){queueMicrotask(()=>api.updateScene({elements:fitted,captureUpdate:CaptureUpdateAction.IMMEDIATELY}));return}
    if(api&&elements.some(element=>element.type==='text'&&textStyle(element)&&element.strokeColor!=='transparent'))queueMicrotask(()=>{
@@ -416,6 +441,37 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
    return element;
   }),captureUpdate:CaptureUpdateAction.IMMEDIATELY});
  };
+ function startLabelDrag(event:ReactPointerEvent<HTMLDivElement>){
+  if(!api||event.button!==0||event.shiftKey||event.altKey||event.ctrlKey||event.metaKey||!(event.target instanceof HTMLCanvasElement))return;
+  const state=api.getAppState();if(state.activeTool.type!=='selection'||state.editingTextElement)return;
+  const text=textAt((event.clientX-state.offsetLeft)/state.zoom.value-state.scrollX,(event.clientY-state.offsetTop)/state.zoom.value-state.scrollY);
+  if(!text||text.type!=='text'||!text.containerId)return;
+  const container=api.getSceneElements().find(element=>element.id===text.containerId);
+  if(!container||container.locked||!['rectangle','ellipse','diamond'].includes(container.type))return;
+  event.preventDefault();event.stopPropagation();
+  if(lastLabelClick.current?.id===text.id&&event.timeStamp-lastLabelClick.current.time<450){lastLabelClick.current=null;startEditingText(text);return}
+  labelDrag.current={pointerId:event.pointerId,id:text.id,containerId:container.id,clientX:event.clientX,clientY:event.clientY,x:text.x,y:text.y,customData:text.customData,moved:false};
+  event.currentTarget.setPointerCapture(event.pointerId);
+ }
+ function moveLabelDrag(event:ReactPointerEvent<HTMLDivElement>){
+  const drag=labelDrag.current;if(!api||!drag||drag.pointerId!==event.pointerId)return;
+  const dx=event.clientX-drag.clientX,dy=event.clientY-drag.clientY;
+  if(!drag.moved&&Math.hypot(dx,dy)<4)return;
+  const firstMove=!drag.moved;drag.moved=true;event.preventDefault();event.stopPropagation();
+  const elements=api.getSceneElementsIncludingDeleted();const container=elements.find(element=>element.id===drag.containerId&&!element.isDeleted);
+  if(!container)return;
+  const zoom=api.getAppState().zoom.value,x=drag.x+dx/zoom,y=drag.y+dy/zoom;
+  api.updateScene({elements:elements.map(element=>element.id===drag.id&&element.type==='text'?newElementWith(element,{x,y,customData:{...element.customData,openboardLabelOffset:{x:x-container.x,y:y-container.y}}}):element),captureUpdate:firstMove?CaptureUpdateAction.IMMEDIATELY:CaptureUpdateAction.EVENTUALLY});
+ }
+ function endLabelDrag(event:ReactPointerEvent<HTMLDivElement>,cancelled=false){
+  const drag=labelDrag.current;if(!api||!drag||drag.pointerId!==event.pointerId)return;
+  event.preventDefault();event.stopPropagation();labelDrag.current=null;
+  if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+  if(!drag.moved){lastLabelClick.current={id:drag.id,time:event.timeStamp};api.updateScene({appState:{selectedElementIds:{[drag.id]:true}}});return}
+  lastLabelClick.current=null;
+  const elements=api.getSceneElementsIncludingDeleted();
+  api.updateScene({elements:elements.map(element=>element.id===drag.id&&element.type==='text'?newElementWith(element,cancelled?{x:drag.x,y:drag.y,customData:drag.customData}:{x:element.x,y:element.y},true):element),captureUpdate:cancelled?CaptureUpdateAction.NEVER:CaptureUpdateAction.IMMEDIATELY});
+ }
  function selectTextInTextTool(event:ReactPointerEvent<HTMLDivElement>){
   if(!api||event.button!==0||event.detail>1||event.shiftKey||event.altKey||event.ctrlKey||event.metaKey||!(event.target instanceof HTMLCanvasElement))return;
   const state=api.getAppState();
@@ -431,6 +487,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  }
  function startEditingText(text:ExcalidrawTextElement,initialCharacter?:string){
   if(!api)return;
+  if(text.containerId&&text.customData?.openboardLabelOffset)labelEditing.current={id:text.id,started:false};
   api.updateScene({appState:{selectedElementIds:{[text.id]:true}}});
   setTimeout(()=>{
    const canvas=canvasRef.current;
@@ -486,7 +543,7 @@ export function CanvasEditor({board,update,saveStatus,onBack,onGuestSignIn,theme
  function start(e:ReactPointerEvent<HTMLButtonElement>){const panel=e.currentTarget.parentElement;const bounds=canvasRef.current?.getBoundingClientRect();if(!panel||!bounds)return;const r=panel.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,left:r.left-bounds.left,top:r.top-bounds.top,moved:false};e.currentTarget.setPointerCapture(e.pointerId)}
  function move(e:ReactPointerEvent<HTMLButtonElement>){const d=drag.current;const box=canvasRef.current;if(!d||!box)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)>4)d.moved=true;if(d.moved)setPosition({x:Math.max(0,Math.min(box.clientWidth-46,d.left+dx)),y:Math.max(0,Math.min(box.clientHeight-154,d.top+dy))})}
  function end(){if(drag.current&&!drag.current.moved){if(!open){clearSelection();setFlowchartsOpen(false);setBackgroundOpen(false)}setOpen(value=>!value)}drag.current=null}
- return <main className="editor"><div className="editor-head"><button className="back" aria-label="All boards" title="All boards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':saveStatus==='sync-unavailable'?'Not saved, account sync unavailable':saveStatus==='not-saved'?<>Not saved, {onGuestSignIn?<button type="button" className="save-sign-in" onClick={onGuestSignIn}>please <span>sign in</span></button>:'please sign in'}</>:''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;selectTextInTextTool(e)}} onDoubleClickCapture={editTextOnDoubleClick} onKeyDownCapture={typeIntoSelectedText} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
+ return <main className="editor"><div className="editor-head"><button className="back" aria-label="All boards" title="All boards" onClick={onBack}><ArrowLeft size={17}/></button><div className="name-wrap"><input aria-label="Board name" value={board.name} maxLength={100} onFocus={e=>{const input=e.currentTarget;requestAnimationFrame(()=>{if(document.activeElement===input)input.setSelectionRange(0,0)})}} onChange={e=>update({...board,name:e.target.value})} onBlur={()=>{if(!board.name.trim())update({...board,name:'Untitled board'})}}/></div><span className="save-status" data-status={saveStatus??undefined} role="status" aria-live="polite">{saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved':saveStatus==='sync-unavailable'?'Not saved, account sync unavailable':saveStatus==='not-saved'?<>Not saved, {onGuestSignIn?<button type="button" className="save-sign-in" onClick={onGuestSignIn}>please <span>sign in</span></button>:'please sign in'}</>:''}</span></div><div className="canvas-wrap excalidraw-wrap" ref={canvasRef} data-background={background} style={{"--grid-size":`${gridView.size}px`,"--grid-x":`${gridView.x}px`,"--grid-y":`${gridView.y}px`,...(board.canvasColor?{"--canvas-color":board.canvasColor}:{})} as CSSProperties} data-show-properties={showProperties} onPointerDownCapture={e=>{modifiedPointer.current=e.shiftKey||e.altKey||e.ctrlKey||e.metaKey;startLabelDrag(e);if(!labelDrag.current)selectTextInTextTool(e)}} onPointerMoveCapture={moveLabelDrag} onPointerUpCapture={e=>endLabelDrag(e)} onPointerCancelCapture={e=>endLabelDrag(e,true)} onDoubleClickCapture={editTextOnDoubleClick} onKeyDownCapture={typeIntoSelectedText} onClickCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}} onInputCapture={e=>{if((e.target as Element).closest('.selected-shape-actions'))styleIntent.current=true}}>
   <input ref={importRef} type="file" accept=".openboard,.excalidraw,application/json" hidden onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void openDiagram(file)}}/>
   <Excalidraw theme={theme} initialData={{elements:initial,files:board.scene?.files,appState:{viewBackgroundColor:background==='plain'?(board.canvasColor??(theme==='dark'?'#f0f0f0':'#ffffff')):'transparent',currentItemRoughness:0,currentItemFontFamily:FONT_FAMILY.Helvetica,currentItemStrokeColor:'#000000',currentItemBackgroundColor:'#ffffff01',currentItemFillStyle:'solid',...preferences.current,...(board.scene?.viewport?{zoom:{value:board.scene.viewport.zoom as ReturnType<ExcalidrawImperativeAPI['getAppState']>['zoom']['value']},scrollX:board.scene.viewport.scrollX,scrollY:board.scene.viewport.scrollY}:{})},scrollToContent:!board.scene?.viewport}} excalidrawAPI={setApi} onChange={onChange} onPointerDown={bindContainedText} onPointerUp={selectShapeInterior} onScrollChange={rememberViewport} UIOptions={{tools:{image:false},canvasActions:{changeViewBackgroundColor:false,toggleTheme:true}}}/>
   {richText.map(({element,x,y,zoom,editing})=>{const style=textStyle(element);if(!style||editing)return null;return <div key={element.id} className="rich-text-overlay" aria-hidden="true" style={{left:x,top:y,width:element.width*zoom,height:element.height*zoom,fontFamily:fontName(element.fontFamily),fontSize:element.fontSize*zoom,lineHeight:element.lineHeight,color:style.color,fontWeight:style.bold?700:400,fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:element.textAlign as CSSProperties['textAlign'],opacity:element.opacity/100,transform:`rotate(${element.angle}rad)`}}>{element.text}</div>})}

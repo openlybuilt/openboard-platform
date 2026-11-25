@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { boardSnapshots, isExpiredDeleted, loadBoards, newBoard, reconcileLocalBoards, loadFolders, saveFolders, type Folder, type Board } from './storage';
 import { CanvasEditor } from './CanvasEditor';
 import { BoardHome } from './BoardHome';
+import { folderDescendants } from './folder-tree';
 import { readBoardFile } from './board-file';
 import type { CloudBoards } from './cloud-boards';
 
@@ -75,11 +76,20 @@ export function App({authConfigured=false,guestUnsaved=false,cloud,syncUnavailab
    }catch{setError('Could not save folders. Check that browser storage is available.');return false}
   };
   const deleteFolder=(folder:Folder)=>{
-   const now=Date.now();
-   const next=boardsRef.current.map(board=>board.folderId===folder.id&&!board.deletedAt?{...board,deletedAt:now,updatedAt:now}:board);
-   if(!commit(next))return false;
-   if(boardsRef.current.some(board=>board.folderId===folder.id&&!board.deletedAt)){setError('Some boards changed in another tab and were not deleted. Review them and try again.');return false}
-   return changeFolder({type:'delete',id:folder.id});
+   if(readFailed||loading||transient)return false;
+   try{
+    const current=cloud?foldersRef.current:loadFolders();
+    const ids=folderDescendants(current,folder.id);
+    const now=Date.now();
+    const next=boardsRef.current.map(board=>board.folderId&&ids.has(board.folderId)&&!board.deletedAt?{...board,deletedAt:now,updatedAt:now}:board);
+    if(!commit(next))return false;
+    if(boardsRef.current.some(board=>board.folderId&&ids.has(board.folderId)&&!board.deletedAt)){setError('Some boards changed in another tab and were not deleted. Review them and try again.');return false}
+    const remaining=current.filter(item=>!ids.has(item.id));
+    if(cloud)cloud.enqueueFolders([...ids].reverse().map(id=>({type:'delete' as const,id})));else saveFolders(remaining);
+    foldersRef.current=remaining;setFolders(remaining);setError('');
+    if(cloud)void cloud.flushFolders().catch(()=>setError('Could not sync folders. Changes are saved in this browser and will retry on your next edit or reload.'));
+    return true;
+   }catch{setError('Could not delete folders. Check that browser storage is available.');return false}
   };
   const moveBoard=(board:Board,folderId:string)=>{const {folderId:_old,...rest}=board;commit(boardsRef.current.map(item=>item.id===board.id?{...rest,...(folderId?{folderId}:{}),updatedAt:Date.now()}:item))};
   const remove=()=>{if(!boardToDelete)return;const now=Date.now();const next=boardToDelete.deletedAt?boardsRef.current.filter(board=>board.id!==boardToDelete.id):boardsRef.current.map(board=>board.id===boardToDelete.id?{...board,deletedAt:now,updatedAt:now}:board);if(commit(next))deleteDialog.current?.close()};
