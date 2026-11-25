@@ -102,7 +102,7 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
       </article>
     )}</div> : <div className="empty"><div className="empty-icon">{view === 'boards' ? <Boxes size={25}/> : <Trash2 size={23}/>}</div><h3>{view === 'boards' ? (active.length ? 'No boards here yet.' : 'Your first idea starts here.') : 'Nothing recently deleted.'}</h3><p>{view === 'boards' ? 'Create a board to map out an architecture, a system, or anything on your mind.' : 'Deleted boards stay here for 30 days before they are removed.'}</p>{view === 'boards' && <button className="secondary" type="button" onClick={() => onCreate(selected?.id)}><Plus size={16}/> Create a board</button>}</div>}
     </section></div>
-    {folderMenu && <div ref={folderMenuRef} className="folder-actions-menu" role="group" aria-label="Folder actions" style={{left:folderMenu.x,top:folderMenu.y}}><button type="button" onClick={()=>{renameFolder(folderMenu.folder);setFolderMenu(null)}}>Rename</button><button type="button" onClick={()=>{setFolderToDelete(folderMenu.folder);setFolderMenu(null)}}>Delete</button></div>}
+    {folderMenu && <div ref={folderMenuRef} className="folder-actions-menu" role="group" aria-label="Folder actions" style={{left:folderMenu.x,top:folderMenu.y}}><button type="button" onClick={()=>{renameFolder(folderMenu.folder);setFolderMenu(null)}}>Rename</button><button type="button" className="folder-delete-action" onClick={()=>{setFolderToDelete(folderMenu.folder);setFolderMenu(null)}}>Delete</button></div>}
     <dialog ref={folderDialog} className="delete-dialog folder-dialog" aria-labelledby="folder-dialog-title" onClose={()=>setEditingFolder(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
       <form onSubmit={event=>{event.preventDefault();saveFolder()}}>
         <h2 id="folder-dialog-title">{editingFolder?.name ? 'Rename folder' : 'New folder'}</h2>
@@ -110,8 +110,8 @@ export function BoardHome({ boards, folders, onFolderChange, onMove, authConfigu
         <div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" onClick={()=>folderDialog.current?.close()}>Cancel</button><button type="submit" className="folder-save" disabled={!folderName.trim()}>{editingFolder?.name ? 'Save' : 'Create folder'}</button></div>
       </form>
     </dialog>
-    <dialog ref={deleteFolderDialog} className="delete-dialog" aria-labelledby="delete-folder-title" onClose={()=>setFolderToDelete(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
-      <h2 id="delete-folder-title">Delete folder?</h2><p>“{folderToDelete?.name}” will be deleted. Its boards will remain in All boards.</p>
+    <dialog ref={deleteFolderDialog} className="delete-dialog folder-delete-dialog" aria-labelledby="delete-folder-title" onClose={()=>setFolderToDelete(null)} onClick={event=>{if(event.target===event.currentTarget)event.currentTarget.close()}}>
+      <h2 id="delete-folder-title">Delete folder?</h2><p>“{folderToDelete?.name}” will be deleted. {folderToDelete && active.filter(board=>board.folderId===folderToDelete.id).length > 0 ? <>{active.filter(board=>board.folderId===folderToDelete.id).length} {active.filter(board=>board.folderId===folderToDelete.id).length === 1 ? 'board is' : 'boards are'} inside and will remain in All boards.</> : 'Any boards in it will remain in All boards.'}</p>
       <div className="delete-dialog-actions"><button type="button" className="delete-dialog-cancel" autoFocus onClick={()=>deleteFolderDialog.current?.close()}>Cancel</button><button type="button" className="delete-dialog-confirm" onClick={deleteFolder}>Delete folder</button></div>
     </dialog>
   </main>;
